@@ -448,6 +448,7 @@
   input.secret{-webkit-text-security:disc; text-security:disc;}
   .sync-btn{position:absolute; right:62px; top:14px; width:40px; height:40px; border-radius:50%; border:none; background:rgba(255,255,255,.16); color:#fff; display:flex; align-items:center; justify-content:center; font-size:22px; line-height:1;}
   .sync-btn.spin span{display:inline-block; animation:syncspin 1s linear infinite;}
+  .sync-btn.has-dirty::after{content:""; position:absolute; top:4px; right:4px; width:11px; height:11px; border-radius:50%; background:#ffd400; border:2px solid #fff;}
   .sync-btn.has-pend::after{content:""; position:absolute; top:4px; right:4px; width:11px; height:11px; border-radius:50%; background:#f5a623; border:2px solid #fff;}
   @keyframes syncspin{to{transform:rotate(360deg);}}
   .cf-card{border:1px solid var(--border); border-radius:12px; padding:12px; margin-bottom:12px; background:var(--surface);}
@@ -927,6 +928,13 @@
       <button type="button" class="btn primary" onclick="syncSave()">Сохранить и проверить</button>
       <button type="button" class="btn ghost" onclick="syncDisconnect()">Отключить</button>
     </div>
+    <label style="margin-top:10px;">Жёлтая точка на ⟳ появляется</label>
+    <select id="syDelay" onchange="syncSetDelay(this.value)">
+      <option value="0">Сразу после изменения</option>
+      <option value="1">Через 1 ч</option>
+      <option value="3">Через 3 ч</option>
+      <option value="24">Через сутки</option>
+    </select>
     <div id="syStatus" style="font-size:calc(13px * var(--fs,1)); margin-top:10px;">Не подключено</div>
     <div id="syLast" style="font-size:calc(12px * var(--fs,1)); color:var(--ink-faint); margin-top:4px;"></div>
     <button type="button" class="btn primary" style="margin-top:10px;" onclick="syncNow()">Синхронизировать</button>
@@ -1412,6 +1420,7 @@ async function saveData(){
     console.error("Ошибка сохранения", e);
     toast("Не удалось сохранить данные на этом устройстве");
   }
+  if(typeof syncMarkDirty === "function") syncMarkDirty();
 }
 
 function showScreen(name){
@@ -4066,7 +4075,7 @@ async function checkForUpdate(){
   btn.disabled = false;
 }
 
-var APP_VERSION = "2026-10-30.2";
+var APP_VERSION = "2026-10-30.3";
 var BACKUP_KEY = "savings-app-last-backup";
 var EXPORT_TS_KEY = "savings-app-last-export-ts";
 var IMPORT_TS_KEY = "savings-app-last-import-ts";
@@ -4303,7 +4312,7 @@ function rollbackImport(skipConfirm){
 
 /* ===== Синхронизация через GitHub ===== */
 var SYNC_KEY = "mrtekhnik.sync", SYNC_DIR = "savings", SYNC_STATE_KEY = "savings-app-sync-state";
-var syncState = { known: {}, lastSync: 0, localM: {}, pending: [], dupOk: [] };
+var syncState = { known: {}, lastSync: 0, localM: {}, pending: [], dupOk: [], dirtySince: 0, delayH: 1 };
 var syncing = false;
 
 function loadSyncState(){
@@ -4311,7 +4320,8 @@ function loadSyncState(){
     var v = JSON.parse(lsGet(SYNC_STATE_KEY) || "null");
     if(v && typeof v === "object"){
       syncState = { known: v.known || {}, lastSync: v.lastSync || 0, localM: v.localM || {},
-        pending: Array.isArray(v.pending) ? v.pending : [], dupOk: Array.isArray(v.dupOk) ? v.dupOk : [] };
+        pending: Array.isArray(v.pending) ? v.pending : [], dupOk: Array.isArray(v.dupOk) ? v.dupOk : [],
+        dirtySince: v.dirtySince || 0, delayH: [0,1,3,24].indexOf(v.delayH) !== -1 ? v.delayH : 1 };
     }
   }catch(e){}
 }
@@ -4365,7 +4375,7 @@ function kindOf(key){ return key.split(":")[0]; }
 var SYNC_CHOICE = { acc: 1, op: 1, rec: 1 };      /* при расхождении — окно выбора */
 var SYNC_VISIBLE = { acc: 1, op: 1, rec: 1, goal: 1, hist: 1, bank: 1, cat: 1 };
 
-function syncCollect(){
+function syncCollect(noM){
   var items = {};
   function add(k, d){ items[k] = { d: d, fp: fpOf(d) }; }
   DATA.accounts.forEach(function(a){ add("acc:" + a.id, a); });
@@ -4380,6 +4390,7 @@ function syncCollect(){
   add("cfg:risk", { riskSettings: DATA.riskSettings, depositTaxRate: DATA.depositTaxRate });
   add("cfg:bankOrder", { order: DATA.banks.slice() });
   add("cfg:catOrder", { exp: DATA.opCats.exp.slice(), inc: DATA.opCats.inc.slice() });
+  if(noM) return items;
   var now = Date.now();
   Object.keys(items).forEach(function(k){
     var kn = syncState.known[k];
@@ -4387,6 +4398,43 @@ function syncCollect(){
     else items[k].m = syncState.localM[k] || (syncState.localM[k] = now);
   });
   return items;
+}
+
+var syncDirtyTimer = null;
+function syncIsDirty(){
+  if(!syncCfg()) return false;
+  if(!syncState.lastSync) return true;
+  var L = syncCollect(true), B = syncState.known;
+  for(var k in L){ if(!B[k] || B[k].fp !== L[k].fp) return true; }
+  for(var k2 in B){ if(!L[k2]) return true; }
+  return false;
+}
+function syncMarkDirty(){
+  var dirty = false;
+  try{ dirty = syncIsDirty(); }catch(e){}
+  var changed = false;
+  if(dirty && !syncState.dirtySince){ syncState.dirtySince = Date.now(); changed = true; }
+  if(!dirty && syncState.dirtySince){ syncState.dirtySince = 0; changed = true; }
+  if(changed) saveSyncState();
+  syncUpdateDot();
+}
+function syncUpdateDot(){
+  var b = document.getElementById("syncBtn"); if(!b) return;
+  if(syncDirtyTimer){ clearTimeout(syncDirtyTimer); syncDirtyTimer = null; }
+  var show = false;
+  if(syncCfg() && syncState.dirtySince !== undefined){
+    if(!syncState.lastSync) show = true;
+    else if(syncState.dirtySince){
+      var left = syncState.dirtySince + syncState.delayH * 3600000 - Date.now();
+      if(left <= 0) show = true;
+      else syncDirtyTimer = setTimeout(syncUpdateDot, Math.min(left + 50, 2147483000));
+    }
+  }
+  b.classList.toggle("has-dirty", show);
+  b.title = show ? "Есть несинхронизированные изменения" : "Синхронизировать";
+}
+function syncSetDelay(v){
+  syncState.delayH = parseInt(v, 10); saveSyncState(); syncUpdateDot();
 }
 
 function syncCorrupt(){ var e = new Error("corrupt"); e.code = "corrupt"; return e; }
@@ -4595,6 +4643,7 @@ async function syncOnce(cfg, prog){
   syncState.known = known; syncState.localM = {}; syncState.lastSync = Date.now();
   syncState.pending = syncState.pending.concat(newPending);
   saveSyncState();
+  syncMarkDirty();
   var vis = function(keys){ return keys.filter(function(k){ return SYNC_VISIBLE[kindOf(k)]; }).length; };
   return { up: vis(res.up) + vis(Object.keys(res.merged)), down: vis(res.down), del: vis(res.delLocal) + vis(res.delRemote),
     any: res.up.length + res.down.length + res.delLocal.length + res.delRemote.length + Object.keys(res.merged).length,
@@ -4751,6 +4800,8 @@ function resolvePending(id, choice){
 /* --- интерфейс --- */
 function renderSyncUI(){
   var cfg = syncCfg(), n = syncState.pending.length;
+  var dsel = document.getElementById("syDelay"); if(dsel) dsel.value = String(syncState.delayH);
+  syncUpdateDot();
   var b = document.getElementById("syncBtn"); if(b) b.classList.toggle("has-pend", n > 0);
   var hb = document.getElementById("syncPendHome");
   if(hb){ hb.hidden = n === 0; if(n) document.getElementById("syncPendHomeText").textContent = "Синхронизация: требует решения — " + n + ". Нажмите, чтобы посмотреть."; }
@@ -4814,6 +4865,7 @@ async function init(){
   applySettings();
   processRecurring();
   initUpdates();
+  syncMarkDirty();
   renderSyncUI();
   if(DATA.appLock && DATA.appLock.enabled && DATA.appLock.hash){
     document.getElementById("lockOverlay").hidden = false;
