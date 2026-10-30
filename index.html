@@ -444,17 +444,36 @@
     width:auto; padding:8px 10px; font-size:calc(13px * var(--fs,1)); border-radius:var(--radius-sm);
     border:1px solid var(--border); background:var(--surface); color:var(--ink);
   }
+
+  .sync-btn{position:absolute; right:62px; top:14px; width:40px; height:40px; border-radius:50%; border:none; background:rgba(255,255,255,.16); color:#fff; display:flex; align-items:center; justify-content:center; font-size:22px; line-height:1;}
+  .sync-btn.spin span{display:inline-block; animation:syncspin 1s linear infinite;}
+  .sync-btn.has-pend::after{content:""; position:absolute; top:4px; right:4px; width:11px; height:11px; border-radius:50%; background:#f5a623; border:2px solid #fff;}
+  @keyframes syncspin{to{transform:rotate(360deg);}}
+  .cf-card{border:1px solid var(--border); border-radius:12px; padding:12px; margin-bottom:12px; background:var(--surface);}
+  .cf-h{font-weight:700; margin-bottom:8px;}
+  .cf-cols{display:flex; gap:8px; flex-wrap:wrap;}
+  .cf-col{flex:1 1 140px; min-width:0; border:1px solid var(--border); border-radius:10px; padding:8px; font-size:calc(13px * var(--fs,1));}
+  .cf-t{font-weight:700; margin-bottom:4px; color:var(--ink-soft);}
+  .cf-l{word-break:break-word;}
+  .cf-m{color:var(--ink-faint); font-size:calc(12px * var(--fs,1)); margin-top:4px;}
+  .cf-note{font-size:calc(12px * var(--fs,1)); color:var(--ink-faint); margin:8px 0;}
+  .need-dec{display:inline-block; font-size:11px; font-weight:700; color:#8a5a00; background:#fff1d6; border-radius:6px; padding:1px 6px; margin-left:6px; vertical-align:middle;}
 </style>
 </head>
 <body>
 
 <div class="topbar">
   <button type="button" class="priv-btn" id="privBtn" onclick="togglePrivacy()" aria-label="Скрыть или показать суммы"></button>
+  <button type="button" class="sync-btn" id="syncBtn" onclick="syncNow()" aria-label="Синхронизировать"><span>⟳</span></button>
   <h1 id="topbarTitle">Личные накопления</h1>
   <div class="sub" id="topbarSub">Загрузка данных…</div>
 </div>
 
 <div id="screen-home" class="screen">
+  <div class="reminder-card" id="syncPendHome" hidden onclick="openConflicts()" style="cursor:pointer;">
+    <span class="reminder-icon">⟳</span>
+    <span class="reminder-text" id="syncPendHomeText"></span>
+  </div>
   <div class="reminder-card" id="recDueHome" hidden onclick="showScreen('ops')" style="cursor:pointer;">
     <span class="reminder-icon">🔁</span>
     <span class="reminder-text" id="recDueHomeText"></span>
@@ -896,6 +915,23 @@
     </div>
   </div>
 
+  <div class="card" data-svc="sync">
+    <h2>Синхронизация через GitHub</h2>
+    <p style="font-size:calc(13px * var(--fs,1)); color:var(--ink-soft); margin:0 0 10px;">Связывает телефон и ПК через ваш приватный репозиторий. Отправка только по кнопке ⟳ вверху экрана.</p>
+    <label>Репозиторий</label>
+    <input type="text" id="syRepo" placeholder="mrtekhnik/sync" autocapitalize="off" autocomplete="off">
+    <label style="margin-top:8px;">Токен</label>
+    <input type="password" id="syTok" placeholder="github_pat_…" autocomplete="off">
+    <div class="btn-row" style="margin-top:10px;">
+      <button type="button" class="btn primary" onclick="syncSave()">Сохранить и проверить</button>
+      <button type="button" class="btn ghost" onclick="syncDisconnect()">Отключить</button>
+    </div>
+    <div id="syStatus" style="font-size:calc(13px * var(--fs,1)); margin-top:10px;">Не подключено</div>
+    <div id="syLast" style="font-size:calc(12px * var(--fs,1)); color:var(--ink-faint); margin-top:4px;"></div>
+    <button type="button" class="btn primary" style="margin-top:10px;" onclick="syncNow()">Синхронизировать</button>
+    <button type="button" class="btn ghost" id="syConfBtn" style="margin-top:8px;" onclick="openConflicts()" hidden>Решить конфликты</button>
+  </div>
+
   <div class="card">
     <h2>Резервная копия</h2>
     <p style="font-size:calc(13px * var(--fs,1)); color:var(--ink-soft); margin:0 0 12px;">Сохраните данные в файл, чтобы не потерять их при очистке данных браузера или смене телефона.</p>
@@ -940,6 +976,7 @@
     <div class="about-row"><span>Версия</span><span id="aboutVersion">—</span></div>
     <div class="about-row"><span>Последний экспорт</span><span id="aboutExport">—</span></div>
     <div class="about-row"><span>Последнее восстановление</span><span id="aboutImport">—</span></div>
+    <div class="about-row"><span>Синхронизация</span><span id="aboutSync">—</span></div>
     <div class="about-row"><span>Режим</span><span id="aboutMode">—</span></div>
     <button type="button" class="btn ghost" style="margin-top:12px;" id="checkUpdBtn" onclick="checkForUpdate()">Проверить обновление</button>
     <button type="button" class="btn primary" style="margin-top:8px;" id="openNewBtn" onclick="openAppUrl()" hidden>Открыть новую версию</button>
@@ -1232,6 +1269,10 @@
     </form>
   </div>
 </div>
+
+<div class="overlay" id="syncBusy" hidden style="z-index:300;"><div class="sheet-panel" style="text-align:center;"><h3 id="syncBusyText">Синхронизация…</h3></div></div>
+<div class="overlay" id="msgOverlay" hidden style="z-index:300;"><div class="sheet-panel"><h3 id="msgTitle"></h3><p id="msgText" style="white-space:pre-wrap; font-size:15px;"></p><div class="btn-row sheet-footer"><button type="button" class="btn primary" onclick="closeMsg()">Понятно</button></div></div></div>
+<div class="overlay" id="conflictOverlay" hidden style="z-index:290;"><div class="sheet-panel"><h3>Требует решения</h3><div id="conflictList"></div><div class="btn-row sheet-footer"><button type="button" class="btn ghost" onclick="closeConflicts()">Решу позже</button></div></div></div>
 
 <div class="toast" id="toast">
   <span id="toastText"></span>
@@ -2240,7 +2281,7 @@ function renderAccounts(){
     }
 
     div.innerHTML =
-      '<div class="info"><div class="bank">'+titleHtml+'</div>' +
+      '<div class="info"><div class="bank">'+titleHtml+(isPendingKey('acc:'+a.id) ? '<span class="need-dec">требует решения</span>' : '')+'</div>' +
       (metaText ? '<div class="meta">'+esc(metaText)+'</div>' : '') +
       '</div>' +
       '<div class="right"><div class="amount">'+fmt(a.amount)+' '+currencySymbol(a.currency)+'</div>' +
@@ -3138,7 +3179,7 @@ function renderOps(){
   var items = DATA.ops.filter(function(o){ return (o.date || "").slice(0, 7) === opsMonth; })
     .sort(function(a,b){ return b.date.localeCompare(a.date) || String(b.id).localeCompare(String(a.id)); });
   document.getElementById("opList").innerHTML = items.length ? items.map(function(o){
-    return '<div class="op-row"><div class="op-main" onclick="editOp(\'' + o.id + '\')"><div class="op-cat">' + esc(o.cat) + '</div><div class="op-sub">' + formatDateRu(o.date) + (o.comment ? ' · ' + esc(o.comment) : '') + '</div></div>' +
+    return '<div class="op-row"><div class="op-main" onclick="editOp(\'' + o.id + '\')"><div class="op-cat">' + esc(o.cat) + (isPendingKey('op:' + o.id) ? '<span class="need-dec">требует решения</span>' : '') + '</div><div class="op-sub">' + formatDateRu(o.date) + (o.comment ? ' · ' + esc(o.comment) : '') + '</div></div>' +
       '<div class="op-amt ' + o.type + '">' + (o.type === "inc" ? "+" : "−") + fmt(o.amount) + '</div>' +
       '<button type="button" class="icon-btn" aria-label="Удалить" onclick="deleteOp(\'' + o.id + '\')">✕</button></div>';
   }).join("") : '<div style="font-size:calc(13px * var(--fs,1));color:var(--ink-faint);">За этот месяц операций нет.</div>';
@@ -3791,7 +3832,7 @@ function recFreqLabel(rec){
 }
 
 function addOpFromRec(rec, date){
-  DATA.ops.push({ id: uid(), type: rec.type, amount: Number(rec.amount) || 0, cat: rec.cat, date: date, comment: rec.comment || "", recId: rec.id });
+  DATA.ops.push({ id: "r_" + rec.id + "_" + date, type: rec.type, amount: Number(rec.amount) || 0, cat: rec.cat, date: date, comment: rec.comment || "", recId: rec.id });
   rec.handled = rec.handled || {};
   rec.handled[date] = true;
 }
@@ -4024,7 +4065,7 @@ async function checkForUpdate(){
   btn.disabled = false;
 }
 
-var APP_VERSION = "2026-10-29.2";
+var APP_VERSION = "2026-10-30.1";
 var BACKUP_KEY = "savings-app-last-backup";
 var EXPORT_TS_KEY = "savings-app-last-export-ts";
 var IMPORT_TS_KEY = "savings-app-last-import-ts";
@@ -4179,6 +4220,7 @@ function replaceDataFrom(parsed){
     DATA.riskSettings = normalizeRiskSettings(parsed.riskSettings);
   }
   saveData();
+  syncResetKnown();
   renderHome();
   renderAccounts();
   renderBanks();
@@ -4196,12 +4238,18 @@ function importBackup(ev){
   reader.onload = function(e){
     try{
       var parsed = JSON.parse(e.target.result);
+      if(parsed && parsed.app === "savings-sync"){
+        try{ parsed = syncFileToBackup(parsed); }
+        catch(se){ toast("Файл синхронизации повреждён или не подходит"); return; }
+        var fromTs = (JSON.parse(e.target.result).ts) || "";
+        parsed.__syncInfo = "Файл синхронизации" + (fromTs ? " от " + formatDateTimeRu(fromTs) : "") + ": счетов " + parsed.accounts.length + ", операций " + parsed.ops.length + ", целей " + parsed.goals.length + ".\n";
+      }
       if(!parsed || !Array.isArray(parsed.accounts) || !Array.isArray(parsed.banks) || !parsed.rates){
         toast("Файл повреждён или не подходит");
         return;
       }
       var hasCurrentData = DATA.accounts.length > 0 || DATA.goals.length > 0 || DATA.history.length > 0 || DATA.ops.length > 0 || DATA.recurring.length > 0;
-      var ok = confirm("Заменить текущие данные данными из файла?" +
+      var ok = confirm((parsed.__syncInfo || "") + "Заменить текущие данные данными из файла? (настройки внешнего вида останутся)" +
         (hasCurrentData ? "\nПеред заменой будет скачана копия текущих данных." : ""));
       if(!ok) return;
 
@@ -4217,6 +4265,7 @@ function importBackup(ev){
         lsRemove(PRE_IMPORT_KEY);
       }
 
+      delete parsed.__syncInfo;
       replaceDataFrom(parsed);
       lsSet(IMPORT_TS_KEY, new Date().toISOString());
       renderAbout();
@@ -4250,12 +4299,521 @@ function rollbackImport(skipConfirm){
   toast("Восстановление отменено");
 }
 
+
+/* ===== Синхронизация через GitHub ===== */
+var SYNC_KEY = "mrtekhnik.sync", SYNC_DIR = "savings", SYNC_STATE_KEY = "savings-app-sync-state";
+var syncState = { known: {}, lastSync: 0, localM: {}, pending: [], dupOk: [] };
+var syncing = false;
+
+function loadSyncState(){
+  try{
+    var v = JSON.parse(lsGet(SYNC_STATE_KEY) || "null");
+    if(v && typeof v === "object"){
+      syncState = { known: v.known || {}, lastSync: v.lastSync || 0, localM: v.localM || {},
+        pending: Array.isArray(v.pending) ? v.pending : [], dupOk: Array.isArray(v.dupOk) ? v.dupOk : [] };
+    }
+  }catch(e){}
+}
+function saveSyncState(){ lsSet(SYNC_STATE_KEY, JSON.stringify(syncState)); }
+function syncResetKnown(){
+  syncState.known = {}; syncState.localM = {}; syncState.pending = [];
+  saveSyncState();
+  if(typeof renderSyncUI === "function") renderSyncUI();
+}
+
+function syncCfg(){
+  try{ var v = JSON.parse(localStorage.getItem(SYNC_KEY) || "null"); return v && v.repo && v.token ? v : null; }catch(e){ return null; }
+}
+function setSyncCfg(v){ try{ if(v) localStorage.setItem(SYNC_KEY, JSON.stringify(v)); else localStorage.removeItem(SYNC_KEY); }catch(e){} }
+function syncApiBase(){ try{ return localStorage.getItem("mrtekhnik.sync.api") || "https://api.github.com"; }catch(e){ return "https://api.github.com"; } }
+
+async function gh(cfg, path, opt){
+  opt = opt || {};
+  var h = { Authorization: "Bearer " + cfg.token, Accept: opt.raw ? "application/vnd.github.raw" : "application/vnd.github+json" };
+  if(opt.body) h["Content-Type"] = "application/json";
+  var r = await fetch(syncApiBase() + "/repos/" + cfg.repo + path, { method: opt.method || "GET", cache: "no-store", headers: h, body: opt.body ? JSON.stringify(opt.body) : undefined });
+  if(opt.allow404 && (r.status === 404 || r.status === 409)) return null;
+  if(!r.ok){ var e = new Error("HTTP " + r.status); e.status = r.status; try{ e.msg = (await r.json()).message; }catch(_){} throw e; }
+  return opt.raw ? r.text() : r.json();
+}
+function syncErrText(e){
+  if(e && e.code === "empty") return "Репозиторий пустой. Создайте его с галочкой «Add a README file».";
+  if(e && e.code === "corrupt") return "Данные в репозитории повреждены или от другой версии. Синхронизация остановлена.";
+  if(e && e.status === 401) return "GitHub не принял токен: проверьте его или выпустите новый (возможно, истёк срок действия).";
+  if(e && e.status === 403) return "У токена нет прав на запись. При создании токена нужно право Contents: Read and write.";
+  if(e && e.status === 404) return "Репозиторий не найден. Проверьте имя (вид: имя/репозиторий) и что токен выдан именно для этого репозитория.";
+  if(e instanceof TypeError) return "Нет связи с GitHub. Проверьте интернет.";
+  return "Ошибка: " + ((e && (e.msg || e.message)) || e);
+}
+
+function stableStr(v){
+  if(v === null || typeof v !== "object") return JSON.stringify(v === undefined ? null : v);
+  if(Array.isArray(v)) return "[" + v.map(stableStr).join(",") + "]";
+  return "{" + Object.keys(v).filter(function(k){ return v[k] !== undefined; }).sort().map(function(k){ return JSON.stringify(k) + ":" + stableStr(v[k]); }).join(",") + "}";
+}
+function hashStr(s){
+  var h1 = 0xdeadbeef, h2 = 0x41c6ce57;
+  for(var i = 0; i < s.length; i++){ var ch = s.charCodeAt(i); h1 = Math.imul(h1 ^ ch, 2654435761); h2 = Math.imul(h2 ^ ch, 1597334677); }
+  h1 = Math.imul(h1 ^ (h1 >>> 16), 2246822507) ^ Math.imul(h2 ^ (h2 >>> 13), 3266489909);
+  h2 = Math.imul(h2 ^ (h2 >>> 16), 2246822507) ^ Math.imul(h1 ^ (h1 >>> 13), 3266489909);
+  return (4294967296 * (2097151 & h2) + (h1 >>> 0)).toString(36);
+}
+function fpOf(d){ return hashStr(stableStr(d)); }
+function deepCopy(x){ return JSON.parse(JSON.stringify(x)); }
+function kindOf(key){ return key.split(":")[0]; }
+var SYNC_CHOICE = { acc: 1, op: 1, rec: 1 };      /* при расхождении — окно выбора */
+var SYNC_VISIBLE = { acc: 1, op: 1, rec: 1, goal: 1, hist: 1, bank: 1, cat: 1 };
+
+function syncCollect(){
+  var items = {};
+  function add(k, d){ items[k] = { d: d, fp: fpOf(d) }; }
+  DATA.accounts.forEach(function(a){ add("acc:" + a.id, a); });
+  DATA.ops.forEach(function(o){ add("op:" + o.id, o); });
+  DATA.recurring.forEach(function(r){ add("rec:" + r.id, r); });
+  DATA.goals.forEach(function(g){ add("goal:" + g.id, g); });
+  DATA.history.forEach(function(h){ add("hist:" + h.month, h); });
+  DATA.log.forEach(function(e){ if(e.id) add("log:" + e.id, e); });
+  DATA.banks.forEach(function(b){ add("bank:" + b, { name: b }); });
+  ["exp", "inc"].forEach(function(t){ DATA.opCats[t].forEach(function(c){ add("cat:" + t + ":" + c, { type: t, name: c }); }); });
+  add("cfg:rates", DATA.rates);
+  add("cfg:risk", { riskSettings: DATA.riskSettings, depositTaxRate: DATA.depositTaxRate });
+  add("cfg:bankOrder", { order: DATA.banks.slice() });
+  add("cfg:catOrder", { exp: DATA.opCats.exp.slice(), inc: DATA.opCats.inc.slice() });
+  var now = Date.now();
+  Object.keys(items).forEach(function(k){
+    var kn = syncState.known[k];
+    if(kn && kn.fp === items[k].fp) items[k].m = kn.m;
+    else items[k].m = syncState.localM[k] || (syncState.localM[k] = now);
+  });
+  return items;
+}
+
+function syncCorrupt(){ var e = new Error("corrupt"); e.code = "corrupt"; return e; }
+function syncParseRemote(R){
+  if(!R || typeof R !== "object" || !R.items || typeof R.items !== "object" || Array.isArray(R.items)) throw syncCorrupt();
+  var out = {};
+  Object.keys(R.items).forEach(function(k){
+    var it = R.items[k], kind = kindOf(k), d = it && it.d;
+    if(!it || typeof it.m !== "number" || !d || typeof d !== "object") throw syncCorrupt();
+    if((kind === "acc" || kind === "op" || kind === "rec" || kind === "goal" || kind === "log") && typeof d.id !== "string") throw syncCorrupt();
+    if(kind === "acc" && (typeof d.amount !== "number" || typeof d.bank !== "string")) throw syncCorrupt();
+    if(kind === "op" && (typeof d.amount !== "number" || typeof d.date !== "string")) throw syncCorrupt();
+    if(kind === "hist" && (typeof d.month !== "string" || typeof d.totalUAH !== "number")) throw syncCorrupt();
+    if((kind === "bank" || kind === "cat") && typeof d.name !== "string") throw syncCorrupt();
+    out[k] = { d: d, m: it.m, fp: fpOf(d) };
+  });
+  var purged = (R.purged && typeof R.purged === "object" && !Array.isArray(R.purged)) ? R.purged : {};
+  return { items: out, purged: purged };
+}
+
+function syncDupSig(key, d){
+  var kind = kindOf(key);
+  if(kind === "op") return "op|" + [d.type, d.amount, d.cat, d.date, d.comment || ""].join("|");
+  if(kind === "acc") return "acc|" + [d.bank, d.type, d.currency, d.name || "", d.amount, d.dateStart || "", d.dateEnd || ""].join("|");
+  return null;
+}
+function syncPairKey(a, b){ return a < b ? a + "~" + b : b + "~" + a; }
+
+/* Трёхстороннее слияние: L — это устройство, R — репозиторий, B — состояние после прошлой синхронизации */
+function syncMerge(L, R, B, purgedR, held, dupOk){
+  var res = { up: [], down: [], delLocal: [], delRemote: [], same: [], gone: [], conf: [], merged: {}, dup: [] };
+  var keys = {};
+  [L, R, B].forEach(function(m){ Object.keys(m).forEach(function(k){ keys[k] = 1; }); });
+  Object.keys(keys).forEach(function(k){
+    if(held[k]) return;
+    var l = L[k], r = R[k], b = B[k];
+    if(l && r){
+      if(l.fp === r.fp){ res.same.push(k); return; }
+      var lc = !b || l.fp !== b.fp, rc = !b || r.fp !== b.fp;
+      if(lc && !rc){ res.up.push(k); return; }
+      if(!lc && rc){ res.down.push(k); return; }
+      var kind = kindOf(k);
+      if(kind === "rec"){
+        var a = deepCopy(l.d), c = deepCopy(r.d), ha = a.handled || {}, hc = c.handled || {};
+        delete a.handled; delete c.handled;
+        if(stableStr(a) === stableStr(c)){
+          var m = deepCopy(l.d); m.handled = Object.assign({}, hc, ha);
+          res.merged[k] = { d: m, m: Math.max(l.m, r.m) }; return;
+        }
+      }
+      if(SYNC_CHOICE[kind]){ res.conf.push(k); return; }
+      if(l.m > r.m || (l.m === r.m && l.fp > r.fp)) res.up.push(k); else res.down.push(k);
+      return;
+    }
+    if(l && !r){
+      if(b && l.fp === b.fp && purgedR[k]) res.delLocal.push(k); else res.up.push(k);
+      return;
+    }
+    if(!l && r){
+      if(b && r.fp === b.fp) res.delRemote.push(k); else res.down.push(k);
+      return;
+    }
+    if(b) res.gone.push(k);
+  });
+  /* дубли по смыслу среди приходящих новых записей */
+  var localSigs = {};
+  Object.keys(L).forEach(function(k){
+    if(res.delLocal.indexOf(k) !== -1) return;
+    var s = syncDupSig(k, L[k].d); if(s) (localSigs[s] = localSigs[s] || []).push(k);
+  });
+  var keep = [], seenDown = {};
+  res.down.slice().sort().forEach(function(k){
+    var s = B[k] ? null : syncDupSig(k, R[k].d);
+    if(!s){ keep.push(k); return; }
+    var matches = (localSigs[s] || []).filter(function(x){ return x !== k; });
+    if(seenDown[s]) matches.push(seenDown[s]);
+    var undecided = matches.filter(function(x){ return dupOk.indexOf(syncPairKey(k, x)) === -1; });
+    if(!undecided.length){ keep.push(k); if(!seenDown[s]) seenDown[s] = k; return; }
+    res.dup.push({ key: k, matches: matches });
+  });
+  res.down = keep;
+  return res;
+}
+
+/* Сборка данных приложения из набора записей (общая для синхронизации и восстановления) */
+function syncBuildData(F, cur){
+  cur = cur || {};
+  function ordered(curArr, prefix, idOf){
+    var out = [], seen = {};
+    (curArr || []).forEach(function(x){ var k = prefix + idOf(x); if(F[k]){ out.push(deepCopy(F[k])); seen[k] = 1; } });
+    Object.keys(F).filter(function(k){ return k.indexOf(prefix) === 0 && !seen[k]; }).sort().forEach(function(k){ out.push(deepCopy(F[k])); });
+    return out;
+  }
+  var data = {};
+  data.accounts = ordered(cur.accounts, "acc:", function(x){ return x.id; });
+  data.ops = ordered(cur.ops, "op:", function(x){ return x.id; });
+  data.recurring = ordered(cur.recurring, "rec:", function(x){ return x.id; });
+  data.goals = ordered(cur.goals, "goal:", function(x){ return x.id; });
+  data.history = Object.keys(F).filter(function(k){ return k.indexOf("hist:") === 0; }).map(function(k){ return deepCopy(F[k]); })
+    .sort(function(a, b){ return a.month.localeCompare(b.month); });
+  data.log = Object.keys(F).filter(function(k){ return k.indexOf("log:") === 0; }).map(function(k){ return deepCopy(F[k]); })
+    .sort(function(a, b){ return (b.ts || 0) - (a.ts || 0); }).slice(0, 2000);
+  var bankSet = {};
+  Object.keys(F).filter(function(k){ return k.indexOf("bank:") === 0; }).forEach(function(k){ bankSet[F[k].name] = 1; });
+  var bo = [];
+  function pushBank(n){ if(bankSet[n] && bo.indexOf(n) === -1) bo.push(n); }
+  if(F["cfg:bankOrder"] && Array.isArray(F["cfg:bankOrder"].order)) F["cfg:bankOrder"].order.forEach(pushBank);
+  (cur.banks || []).forEach(pushBank);
+  Object.keys(bankSet).sort().forEach(pushBank);
+  data.banks = bo;
+  data.opCats = { exp: [], inc: [] };
+  ["exp", "inc"].forEach(function(t){
+    var set = {};
+    Object.keys(F).filter(function(k){ return k.indexOf("cat:" + t + ":") === 0; }).forEach(function(k){ set[F[k].name] = 1; });
+    var order = [];
+    function pc(n){ if(set[n] && order.indexOf(n) === -1) order.push(n); }
+    if(F["cfg:catOrder"] && Array.isArray(F["cfg:catOrder"][t])) F["cfg:catOrder"][t].forEach(pc);
+    ((cur.opCats || {})[t] || []).forEach(pc);
+    Object.keys(set).sort().forEach(pc);
+    data.opCats[t] = order;
+  });
+  if(F["cfg:rates"]) data.rates = deepCopy(F["cfg:rates"]);
+  if(F["cfg:risk"]){
+    data.riskSettings = deepCopy(F["cfg:risk"].riskSettings);
+    data.depositTaxRate = F["cfg:risk"].depositTaxRate;
+  }
+  return data;
+}
+
+function syncApplyData(data){
+  DATA.accounts = data.accounts; DATA.ops = data.ops; DATA.recurring = data.recurring; DATA.goals = data.goals;
+  DATA.history = data.history; DATA.log = data.log; DATA.banks = data.banks.length ? data.banks : DATA.banks;
+  DATA.opCats = normalizeOpCats(data.opCats);
+  if(data.rates) DATA.rates = normalizeRates(data.rates);
+  if(data.riskSettings) DATA.riskSettings = normalizeRiskSettings(data.riskSettings);
+  if(typeof data.depositTaxRate === "number") DATA.depositTaxRate = data.depositTaxRate;
+  saveData();
+}
+function syncCurrentF(){
+  var F = {}, c = syncCollect();
+  Object.keys(c).forEach(function(k){ F[k] = deepCopy(c[k].d); });
+  return F;
+}
+
+function toB64(str){
+  var bytes = new TextEncoder().encode(str), bin = "";
+  for(var i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
+  return btoa(bin);
+}
+function syncDevName(){ return /Android/i.test(navigator.userAgent) ? "Android" : (/Windows/i.test(navigator.userAgent) ? "Windows" : "устройство"); }
+
+async function syncOnce(cfg, prog){
+  var ref = await gh(cfg, "/git/ref/heads/main", { allow404: true });
+  if(!ref){ var e0 = new Error("empty"); e0.code = "empty"; throw e0; }
+  var head = ref.object.sha, commit = await gh(cfg, "/git/commits/" + head);
+  var idxTxt = await gh(cfg, "/contents/" + SYNC_DIR + "/index.json?ref=" + head, { raw: true, allow404: true });
+  var Rraw = null, remote = { items: {}, purged: {} };
+  if(idxTxt){
+    try{ Rraw = JSON.parse(idxTxt); }catch(pe){ throw syncCorrupt(); }
+    if(Rraw.app && Rraw.app !== "savings-sync") throw syncCorrupt();
+    remote = syncParseRemote(Rraw);
+  }
+  var L = syncCollect(), B = syncState.known, held = {};
+  syncState.pending.forEach(function(p){ held[p.key] = true; });
+  var res = syncMerge(L, remote.items, B, remote.purged, held, syncState.dupOk);
+
+  var newItems = {}, newPurged = Object.assign({}, remote.purged), now = Date.now();
+  Object.keys(remote.items).forEach(function(k){ newItems[k] = { m: remote.items[k].m, d: remote.items[k].d }; });
+  var pushed = 0;
+  res.up.forEach(function(k){ newItems[k] = { m: L[k].m, d: L[k].d }; delete newPurged[k]; pushed++; });
+  Object.keys(res.merged).forEach(function(k){ newItems[k] = { m: res.merged[k].m, d: res.merged[k].d }; delete newPurged[k]; pushed++; });
+  res.delRemote.forEach(function(k){ delete newItems[k]; newPurged[k] = now; });
+  var pk = Object.keys(newPurged).sort(function(a, b){ return newPurged[b] - newPurged[a]; });
+  pk.slice(3000).forEach(function(k){ delete newPurged[k]; });
+  var changed = pushed || res.delRemote.length || stableStr(newPurged) !== stableStr(remote.purged);
+  if(prog) prog(res.up.length + res.down.length);
+
+  if(changed){
+    var out = { app: "savings-sync", v: 1, ts: new Date().toISOString(), items: newItems, purged: newPurged };
+    var blob = await gh(cfg, "/git/blobs", { method: "POST", body: { content: toB64(JSON.stringify(out)), encoding: "base64" } });
+    var tree = await gh(cfg, "/git/trees", { method: "POST", body: { base_tree: commit.tree.sha, tree: [{ path: SYNC_DIR + "/index.json", mode: "100644", type: "blob", sha: blob.sha }] } });
+    var c = await gh(cfg, "/git/commits", { method: "POST", body: { message: "Личные накопления: синхронизация (" + syncDevName() + ")", tree: tree.sha, parents: [head] } });
+    await gh(cfg, "/git/refs/heads/main", { method: "PATCH", body: { sha: c.sha, force: false } });
+  }
+
+  /* применяем на устройстве только после успешного обновления ветки */
+  var F = syncCurrentF(), known = Object.assign({}, B), newPending = [];
+  res.same.forEach(function(k){ known[k] = { fp: L[k].fp, m: Math.min(L[k].m, remote.items[k].m) }; });
+  res.up.forEach(function(k){ known[k] = { fp: L[k].fp, m: L[k].m }; });
+  Object.keys(res.merged).forEach(function(k){
+    F[k] = deepCopy(res.merged[k].d); known[k] = { fp: fpOf(res.merged[k].d), m: res.merged[k].m };
+  });
+  res.down.forEach(function(k){ F[k] = deepCopy(remote.items[k].d); known[k] = { fp: remote.items[k].fp, m: remote.items[k].m }; });
+  res.delLocal.forEach(function(k){ delete F[k]; delete known[k]; });
+  res.delRemote.forEach(function(k){ delete known[k]; });
+  res.gone.forEach(function(k){ delete known[k]; });
+  res.conf.forEach(function(k){
+    known[k] = { fp: remote.items[k].fp, m: remote.items[k].m };
+    newPending.push({ id: uid(), kind: "ver", key: k, l: { d: deepCopy(L[k].d), m: L[k].m }, r: { d: deepCopy(remote.items[k].d), m: remote.items[k].m } });
+  });
+  res.dup.forEach(function(x){
+    newPending.push({ id: uid(), kind: "dup", key: x.key, matches: x.matches, matchD: x.matches.map(function(mk){ return F[mk] ? deepCopy(F[mk]) : (remote.items[mk] ? deepCopy(remote.items[mk].d) : null); }), r: { d: deepCopy(remote.items[x.key].d), m: remote.items[x.key].m } });
+  });
+  var data = syncBuildData(F, DATA);
+  syncApplyData(data);
+  syncState.known = known; syncState.localM = {}; syncState.lastSync = Date.now();
+  syncState.pending = syncState.pending.concat(newPending);
+  saveSyncState();
+  var vis = function(keys){ return keys.filter(function(k){ return SYNC_VISIBLE[kindOf(k)]; }).length; };
+  return { up: vis(res.up) + vis(Object.keys(res.merged)), down: vis(res.down), del: vis(res.delLocal) + vis(res.delRemote),
+    any: res.up.length + res.down.length + res.delLocal.length + res.delRemote.length + Object.keys(res.merged).length,
+    conf: newPending.length };
+}
+
+function setSyncBusy(on, text){
+  var ov = document.getElementById("syncBusy"); if(!ov) return;
+  ov.hidden = !on;
+  if(text) document.getElementById("syncBusyText").textContent = text;
+  var b = document.getElementById("syncBtn"); if(b) b.classList.toggle("spin", on);
+}
+function msgBox(title, text){
+  document.getElementById("msgTitle").textContent = title;
+  document.getElementById("msgText").textContent = text;
+  document.getElementById("msgOverlay").hidden = false;
+}
+function closeMsg(){ document.getElementById("msgOverlay").hidden = true; }
+
+function syncRerender(){
+  rerenderAll();
+  try{ populateGcSource(); }catch(e){}
+  renderSyncUI();
+}
+
+async function syncNow(){
+  var cfg = syncCfg();
+  if(!cfg){
+    toast("Сначала подключите GitHub: Сервис → Синхронизация");
+    showScreen("rates");
+    if(!uiPrefs.svcOpen.sync){ uiPrefs.svcOpen.sync = true; saveUiPrefs(); applySvc(); }
+    return;
+  }
+  if(syncing) return;
+  syncing = true; setSyncBusy(true, "Синхронизация…");
+  try{
+    var res;
+    for(var a = 0; a < 3; a++){
+      try{ res = await syncOnce(cfg, function(n){ setSyncBusy(true, "Синхронизация… " + n); }); break; }
+      catch(e){ if((e.status === 422 || e.status === 409) && a < 2) continue; throw e; }
+    }
+    setSyncBusy(false);
+    syncRerender();
+    var parts = [];
+    if(res.up) parts.push("отправлено " + res.up);
+    if(res.down) parts.push("получено " + res.down);
+    if(res.del) parts.push("удалено " + res.del);
+    if(res.conf){
+      toast((parts.length ? "Синхронизировано: " + parts.join(", ") + ". " : "") + "Нужно решить: " + res.conf);
+      openConflicts();
+    } else if(syncState.pending.length){
+      toast("Синхронизировано. Остались нерешённые записи: " + syncState.pending.length);
+    } else {
+      toast(parts.length ? "Синхронизировано: " + parts.join(", ") : (res.any ? "Синхронизировано" : "Всё уже синхронизировано"));
+    }
+  }catch(e){
+    setSyncBusy(false);
+    msgBox("Синхронизация не удалась", syncErrText(e) + "\n\nДанные на устройстве не изменены.");
+  }finally{ syncing = false; }
+}
+
+/* --- окно решений --- */
+function syncDescribe(key, d){
+  var kind = kindOf(key), L = [];
+  if(!d) return ["—"];
+  if(kind === "acc"){
+    L.push(d.bank + " · " + (d.name || d.type) + " (" + d.currency + ")");
+    L.push("Сумма: " + fmt(d.amount) + " " + currencySymbol(d.currency));
+    if(d.dateStart || d.dateEnd) L.push("Срок: " + formatDateRu(d.dateStart) + " — " + formatDateRu(d.dateEnd));
+    if(d.rate) L.push("Ставка: " + d.rate + "%");
+  } else if(kind === "op"){
+    L.push((d.type === "inc" ? "Доход" : "Расход") + " · " + d.cat);
+    L.push("Сумма: " + fmt(d.amount) + " грн");
+    L.push("Дата: " + formatDateRu(d.date) + (d.comment ? " · " + d.comment : ""));
+  } else if(kind === "rec"){
+    L.push((d.type === "inc" ? "Доход" : "Расход") + " · " + d.cat + " · регулярная");
+    L.push("Сумма: " + fmt(d.amount) + " грн · первая дата " + formatDateRu(d.startDate));
+    L.push((d.active ? "Включена" : "Выключена") + (d.auto ? ", авто" : ", с напоминанием"));
+  } else L.push(key);
+  return L;
+}
+function syncTimeLabel(m){ return m ? formatDateTimeRu(new Date(m).toISOString()) : "—"; }
+function isPendingKey(key){
+  return syncState.pending.some(function(p){ return p.key === key || (p.matches && p.matches.indexOf(key) !== -1); });
+}
+function openConflicts(){
+  renderConflicts();
+  document.getElementById("conflictOverlay").hidden = false;
+}
+function closeConflicts(){ document.getElementById("conflictOverlay").hidden = true; }
+function renderConflicts(){
+  var wrap = document.getElementById("conflictList");
+  if(!syncState.pending.length){
+    wrap.innerHTML = '<div style="font-size:14px;color:var(--ink-soft);">Нерешённых записей нет.</div>';
+    return;
+  }
+  wrap.innerHTML = syncState.pending.map(function(p){
+    function box(title, d, m, key){
+      return '<div class="cf-col"><div class="cf-t">' + esc(title) + '</div>' + syncDescribe(key || p.key, d).map(function(l){ return '<div class="cf-l">' + esc(l) + '</div>'; }).join("") +
+        (m ? '<div class="cf-m">изменено ' + esc(syncTimeLabel(m)) + '</div>' : '') + '</div>';
+    }
+    if(p.kind === "dup"){
+      var left = (p.matches || []).map(function(mk, i){ return box("Уже у вас", p.matchD && p.matchD[i], 0, mk); }).join("");
+      return '<div class="cf-card"><div class="cf-h">Возможный дубль</div><div class="cf-cols">' + left + box("Пришла с другого устройства", p.r.d, p.r.m) + '</div>' +
+        '<div class="cf-note">Пока вы не решите, пришедшая запись не добавляется и в итогах не учитывается.</div>' +
+        '<div class="btn-row"><button class="btn ghost" onclick="resolvePending(\'' + p.id + '\',\'same\')">Это одна запись — оставить одну</button>' +
+        '<button class="btn primary" onclick="resolvePending(\'' + p.id + '\',\'diff\')">Это разные — оставить обе</button></div></div>';
+    }
+    return '<div class="cf-card"><div class="cf-h">Запись изменена на двух устройствах</div><div class="cf-cols">' + box("На этом устройстве", p.l.d, p.l.m) + box("В репозитории", p.r.d, p.r.m) + '</div>' +
+      '<div class="cf-note">Пока вы не решите, в итогах учитывается версия с этого устройства.</div>' +
+      '<div class="btn-row"><button class="btn primary" onclick="resolvePending(\'' + p.id + '\',\'local\')">Оставить эту</button>' +
+      '<button class="btn ghost" onclick="resolvePending(\'' + p.id + '\',\'remote\')">Оставить ту</button></div></div>';
+  }).join("");
+}
+function resolvePending(id, choice){
+  var i = syncState.pending.findIndex(function(p){ return p.id === id; });
+  if(i === -1) return;
+  var p = syncState.pending[i], key = p.key;
+  var rfp = fpOf(p.r.d), rm = p.r.m;
+  if(p.kind === "ver"){
+    if(choice === "remote"){
+      var F = syncCurrentF(); F[key] = deepCopy(p.r.d);
+      syncApplyData(syncBuildData(F, DATA));
+      syncState.known[key] = { fp: rfp, m: rm };
+    } else {
+      syncState.known[key] = { fp: rfp, m: rm };
+      syncState.localM[key] = Date.now();
+    }
+  } else {
+    if(choice === "diff"){
+      var F2 = syncCurrentF(); F2[key] = deepCopy(p.r.d);
+      syncApplyData(syncBuildData(F2, DATA));
+      syncState.known[key] = { fp: rfp, m: rm };
+      (p.matches || []).forEach(function(mk){ syncState.dupOk.push(syncPairKey(key, mk)); });
+    } else {
+      var members = [key].concat(p.matches || []).sort(), keepKey = members[0];
+      var F3 = syncCurrentF();
+      members.forEach(function(mk){
+        if(mk === keepKey) return;
+        if(mk === key) return;
+        delete F3[mk];
+      });
+      if(keepKey === key) F3[key] = deepCopy(p.r.d);
+      syncApplyData(syncBuildData(F3, DATA));
+      syncState.known[key] = { fp: rfp, m: rm };
+    }
+  }
+  syncState.pending.splice(i, 1);
+  saveSyncState();
+  syncRerender();
+  if(syncState.pending.length) renderConflicts(); else { closeConflicts(); toast("Готово. Нажмите ⟳, чтобы отправить решение."); }
+}
+
+/* --- интерфейс --- */
+function renderSyncUI(){
+  var cfg = syncCfg(), n = syncState.pending.length;
+  var b = document.getElementById("syncBtn"); if(b) b.classList.toggle("has-pend", n > 0);
+  var hb = document.getElementById("syncPendHome");
+  if(hb){ hb.hidden = n === 0; if(n) document.getElementById("syncPendHomeText").textContent = "Синхронизация: требует решения — " + n + ". Нажмите, чтобы посмотреть."; }
+  var last = document.getElementById("aboutSync");
+  if(last) last.textContent = cfg ? (syncState.lastSync ? syncTimeLabel(syncState.lastSync) : "ещё не было") : "не настроена";
+  var st = document.getElementById("syStatus");
+  if(st && !st.dataset.keep) st.textContent = cfg ? "Подключено: " + cfg.repo : "Не подключено";
+  var cb = document.getElementById("syConfBtn");
+  if(cb){ cb.hidden = n === 0; cb.textContent = "Решить конфликты (" + n + ")"; }
+  var sl = document.getElementById("syLast");
+  if(sl) sl.textContent = "Последняя синхронизация: " + (cfg ? (syncState.lastSync ? syncTimeLabel(syncState.lastSync) : "ещё не было") : "не настроена");
+}
+function syncFillForm(){
+  var cfg = syncCfg();
+  var r = document.getElementById("syRepo"), t = document.getElementById("syTok");
+  if(r && !r.value) r.value = cfg ? cfg.repo : "";
+  if(t && !t.value) t.value = cfg ? cfg.token : "";
+}
+async function syncSave(){
+  var repo = document.getElementById("syRepo").value.trim().replace(/^https?:\/\/github\.com\//, "").replace(/\/+$/, "");
+  var token = document.getElementById("syTok").value.trim();
+  var st = document.getElementById("syStatus"); st.dataset.keep = "1";
+  if(!/^[\w.-]+\/[\w.-]+$/.test(repo) || !token){ st.textContent = "Укажите репозиторий в виде имя/репозиторий и токен."; return; }
+  st.textContent = "Проверка…";
+  try{
+    var info = await gh({ repo: repo, token: token }, "");
+    if(!info.private){ st.textContent = "Репозиторий публичный — ваши финансы были бы видны всем. Нужен приватный репозиторий. Настройка не сохранена."; return; }
+    var ref = await gh({ repo: repo, token: token }, "/git/ref/heads/main", { allow404: true });
+    if(!ref){ st.textContent = "Репозиторий пустой. Создайте его с галочкой «Add a README file»."; return; }
+    setSyncCfg({ repo: repo, token: token });
+    st.textContent = "Подключено: " + repo + " (приватный) ✓";
+  }catch(e){ st.textContent = syncErrText(e); }
+  renderSyncUI();
+}
+function syncDisconnect(){
+  setSyncCfg(null);
+  document.getElementById("syTok").value = "";
+  var st = document.getElementById("syStatus"); st.dataset.keep = "1";
+  st.textContent = "Отключено. Данные на устройстве не затронуты.";
+  renderSyncUI();
+}
+
+/* восстановление из файла синхронизации (index.json из истории GitHub) */
+function syncFileToBackup(parsed){
+  var rem = syncParseRemote(parsed);
+  var F = {};
+  Object.keys(rem.items).forEach(function(k){ F[k] = rem.items[k].d; });
+  var data = syncBuildData(F, {});
+  data.settings = DATA.settings; data.appLock = DATA.appLock; data.sortMode = DATA.sortMode;
+  if(!data.rates) data.rates = DATA.rates;
+  if(!data.banks.length) throw syncCorrupt();
+  return data;
+}
+
+
 async function init(){
   initServiceCards();
   await loadData();
+  loadSyncState();
+  syncFillForm();
   applySettings();
   processRecurring();
   initUpdates();
+  renderSyncUI();
   if(DATA.appLock && DATA.appLock.enabled && DATA.appLock.hash){
     document.getElementById("lockOverlay").hidden = false;
     var lockInput = document.getElementById("lockInput");
