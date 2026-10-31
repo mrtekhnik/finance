@@ -646,7 +646,8 @@
       <button type="button" id="opTypeInc" onclick="setOpType('inc')">Доход</button>
     </div>
     <input type="number" id="opAmount" inputmode="decimal" step="0.01" placeholder="Сумма, грн" onkeydown="if(event.key==='Enter'){event.preventDefault();submitOp();}">
-    <div class="cat-tiles" id="opCats"></div>
+    <div class="m-toggle" style="margin-top:0; border-top:none; padding:6px 0 10px;" onclick="toggleSection('opcat')"><span>Категория: <b id="opCatLabel">не выбрана</b></span><span class="chev" id="opcatChev">▾</span></div>
+    <div class="cat-tiles" id="opCats" hidden></div>
     <div class="btn-row" style="margin-bottom:10px;">
       <input type="date" id="opDate" style="flex:1.3; min-width:0; padding-left:8px; padding-right:6px;">
       <input type="text" id="opComment" placeholder="Комментарий" style="flex:1; min-width:0;">
@@ -1280,6 +1281,10 @@
       <div><label>Комментарий</label><input type="text" id="recComment" placeholder="Напр. интернет"></div>
       <label style="display:flex; align-items:center; gap:10px; margin:0; color:var(--ink);"><input type="checkbox" id="recAuto" style="width:22px;height:22px;"> Вносить автоматически (иначе — напомнить и спросить)</label>
       <label style="display:flex; align-items:center; gap:10px; margin:0; color:var(--ink);"><input type="checkbox" id="recActive" checked style="width:22px;height:22px;"> Включено</label>
+      <div id="recManualRow" hidden>
+        <label>Внести вручную за дату (например, если удалили из истории)</label>
+        <div class="btn-row"><input type="date" id="recManualDate" style="flex:1.3; min-width:0;"><button type="button" class="btn ghost" onclick="recManualAdd()">Внести</button></div>
+      </div>
       <div class="btn-row sheet-footer">
         <button type="button" class="btn ghost" onclick="closeRecSheet()">Отмена</button>
         <button type="button" class="btn ghost" id="recDeleteBtn" onclick="deleteRec()">Удалить</button>
@@ -2790,8 +2795,8 @@ function deleteAccount(id){
 
 /* ===== Секции, журнал счетов, переводы ===== */
 var UI_KEY = "savings-app-ui";
-var uiPrefs = { history: false, risks: false, month: true, deps: false, rec: false, cats: false, depsCollapsed: {}, svcOpen: {} };
-try{ var _u = JSON.parse(localStorage.getItem(UI_KEY) || "null"); if(_u && typeof _u === "object"){ uiPrefs.history = !!_u.history; uiPrefs.risks = !!_u.risks; uiPrefs.deps = !!_u.deps; uiPrefs.rec = !!_u.rec; uiPrefs.cats = !!_u.cats; if(typeof _u.month === "boolean") uiPrefs.month = _u.month; if(_u.depsCollapsed && typeof _u.depsCollapsed === "object") uiPrefs.depsCollapsed = _u.depsCollapsed; if(_u.svcOpen && typeof _u.svcOpen === "object") uiPrefs.svcOpen = _u.svcOpen; } }catch(e){}
+var uiPrefs = { history: false, risks: false, month: true, deps: false, rec: false, cats: false, opcat: false, depsCollapsed: {}, svcOpen: {} };
+try{ var _u = JSON.parse(localStorage.getItem(UI_KEY) || "null"); if(_u && typeof _u === "object"){ uiPrefs.history = !!_u.history; uiPrefs.risks = !!_u.risks; uiPrefs.deps = !!_u.deps; uiPrefs.rec = !!_u.rec; uiPrefs.cats = !!_u.cats; uiPrefs.opcat = !!_u.opcat; if(typeof _u.month === "boolean") uiPrefs.month = _u.month; if(_u.depsCollapsed && typeof _u.depsCollapsed === "object") uiPrefs.depsCollapsed = _u.depsCollapsed; if(_u.svcOpen && typeof _u.svcOpen === "object") uiPrefs.svcOpen = _u.svcOpen; } }catch(e){}
 
 function pluralRu(n, forms){
   var a = Math.abs(n) % 100, b = a % 10;
@@ -2813,7 +2818,7 @@ function toggleSection(name){
 }
 
 function applySections(){
-  [["history","historyBody","historyChev"],["risks","riskList","risksChev"],["month","monthBody","monthChev"],["deps","depsBody","depsChev"],["rec","recBody","recChev"],["cats","catsBody","catsChev"]].forEach(function(r){
+  [["history","historyBody","historyChev"],["risks","riskList","risksChev"],["month","monthBody","monthChev"],["deps","depsBody","depsChev"],["rec","recBody","recChev"],["opcat","opCats","opcatChev"],["cats","catsBody","catsChev"]].forEach(function(r){
     var body = document.getElementById(r[1]), chev = document.getElementById(r[2]);
     if(!body || !chev) return;
     body.hidden = !uiPrefs[r[0]];
@@ -3094,8 +3099,9 @@ function renderOpForm(){
   document.getElementById("opCats").innerHTML = cats.map(function(c, i){
     return '<button type="button" class="cat-tile' + (c === opCat ? ' on' : '') + '" data-i="' + i + '">' + esc(c) + '</button>';
   }).join("");
+  var lbl = document.getElementById("opCatLabel"); if(lbl) lbl.textContent = opCat || "не выбрана";
   document.querySelectorAll("#opCats .cat-tile").forEach(function(b){
-    b.onclick = function(){ opCat = cats[+b.dataset.i]; lastOpCat[opType] = opCat; renderOpForm(); };
+    b.onclick = function(){ opCat = cats[+b.dataset.i]; lastOpCat[opType] = opCat; renderOpForm(); if(uiPrefs.opcat){ uiPrefs.opcat = false; saveUiPrefs(); applySections(); } };
   });
 }
 
@@ -3850,7 +3856,9 @@ function recFreqLabel(rec){
 }
 
 function addOpFromRec(rec, date){
-  DATA.ops.push({ id: "r_" + rec.id + "_" + date, type: rec.type, amount: Number(rec.amount) || 0, cat: rec.cat, date: date, comment: rec.comment || "", recId: rec.id });
+  var oid = "r_" + rec.id + "_" + date;
+  if(DATA.ops.some(function(o){ return o.id === oid; })) oid += "_" + uid();
+  DATA.ops.push({ id: oid, type: rec.type, amount: Number(rec.amount) || 0, cat: rec.cat, date: date, comment: rec.comment || "", recId: rec.id });
   rec.handled = rec.handled || {};
   rec.handled[date] = true;
 }
@@ -3938,6 +3946,8 @@ function openRecSheet(id){
   var r = id ? DATA.recurring.find(function(x){ return x.id === id; }) : null;
   document.getElementById("recTitle").textContent = r ? "Изменить регулярную операцию" : "Новая регулярная операция";
   document.getElementById("recDeleteBtn").hidden = !r;
+  document.getElementById("recManualRow").hidden = !r;
+  document.getElementById("recManualDate").value = todayLocalISO();
   setRecType(r ? r.type : "exp", r ? r.cat : "");
   document.getElementById("recAmount").value = r ? r.amount : "";
   document.getElementById("recFreq").value = r ? r.freq : "month";
@@ -3949,6 +3959,16 @@ function openRecSheet(id){
 }
 function closeRecSheet(){ document.getElementById("recOverlay").hidden = true; editingRecId = null; }
 
+function recManualAdd(){
+  var rec = DATA.recurring.find(function(x){ return x.id === editingRecId; });
+  var date = document.getElementById("recManualDate").value;
+  if(!rec || !date){ toast("Укажите дату"); return; }
+  var exists = DATA.ops.some(function(o){ return o.recId === rec.id && o.date === date; });
+  if(exists && !confirm("За эту дату операция уже есть. Внести ещё одну?")) return;
+  addOpFromRec(rec, date);
+  saveData(); renderOps(); renderHome(); renderRecDueHome();
+  toast("Внесено: " + formatDateRu(date));
+}
 function recPeriodKey(freq, iso){
   if(freq === "year") return iso.slice(0, 4);
   if(freq === "week"){
@@ -4125,7 +4145,7 @@ async function checkForUpdate(){
   btn.disabled = false;
 }
 
-var APP_VERSION = "2026-11-01.2";
+var APP_VERSION = "2026-11-01.3";
 var BACKUP_KEY = "savings-app-last-backup";
 var EXPORT_TS_KEY = "savings-app-last-export-ts";
 var IMPORT_TS_KEY = "savings-app-last-import-ts";
