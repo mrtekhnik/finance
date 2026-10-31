@@ -3949,6 +3949,35 @@ function openRecSheet(id){
 }
 function closeRecSheet(){ document.getElementById("recOverlay").hidden = true; editingRecId = null; }
 
+function recPeriodKey(freq, iso){
+  if(freq === "year") return iso.slice(0, 4);
+  if(freq === "week"){
+    var p = iso.split("-"), d = new Date(+p[0], +p[1] - 1, +p[2]);
+    d.setDate(d.getDate() - ((d.getDay() + 6) % 7));
+    return isoLocal(d);
+  }
+  return iso.slice(0, 7);
+}
+/* При смене даты/периодичности: внесённые и пропущенные даты старого расписания считаются закрытыми
+   для тех же периодов нового расписания — чтобы операция не продублировалась */
+function recMigrate(rec, data){
+  var res = { handled: Object.assign({}, rec.handled || {}), moves: [] };
+  var periods = {}, today = todayLocalISO();
+  Object.keys(rec.handled || {}).forEach(function(d){ periods[recPeriodKey(data.freq, d)] = true; });
+  DATA.ops.forEach(function(o){ if(o.recId === rec.id) periods[recPeriodKey(data.freq, o.date)] = true; });
+  var upto = today;
+  DATA.ops.forEach(function(o){ if(o.recId === rec.id && o.date > upto) upto = o.date; });
+  var occ = recOccurrences({ freq: data.freq, startDate: data.startDate }, upto);
+  occ.forEach(function(d){
+    var pk = recPeriodKey(data.freq, d);
+    if(!periods[pk]) return;
+    res.handled[d] = true;
+    DATA.ops.forEach(function(o){
+      if(o.recId === rec.id && recPeriodKey(data.freq, o.date) === pk && o.date !== d && !res.moves.some(function(m){ return m.op === o; })) res.moves.push({ op: o, to: d });
+    });
+  });
+  return res;
+}
 function saveRec(ev){
   ev.preventDefault();
   var amt = parseFloat(document.getElementById("recAmount").value);
@@ -3958,7 +3987,9 @@ function saveRec(ev){
   var rec = editingRecId ? DATA.recurring.find(function(x){ return x.id === editingRecId; }) : null;
   var data = { type: recType, cat: cat, amount: amt, freq: document.getElementById("recFreq").value, startDate: start,
     comment: document.getElementById("recComment").value.trim(), auto: document.getElementById("recAuto").checked, active: document.getElementById("recActive").checked };
-  var probe = Object.assign({ handled: rec ? (rec.handled || {}) : {} }, data);
+  var schedChanged = !!(rec && (data.startDate !== rec.startDate || data.freq !== rec.freq));
+  var mig = schedChanged ? recMigrate(rec, data) : null;
+  var probe = Object.assign({ handled: mig ? mig.handled : (rec ? (rec.handled || {}) : {}) }, data);
   var pastN = recDue(probe).length;
   if(data.auto && data.active && pastN > 1 && !confirm("Будут сразу внесены операции за прошедшие даты: " + pastN + ". Продолжить?")) return false;
   var applyN = 0, applyOps = [];
@@ -3966,10 +3997,13 @@ function saveRec(ev){
     applyOps = DATA.ops.filter(function(o){ return o.recId === rec.id && (o.type !== data.type || o.cat !== data.cat || o.amount !== data.amount || (o.comment || "") !== data.comment); });
     applyN = applyOps.length;
   }
-  if(rec) Object.assign(rec, data);
+  if(rec){ Object.assign(rec, data); if(mig) rec.handled = mig.handled; }
   else DATA.recurring.push(Object.assign({ id: uid(), handled: {} }, data));
   if(applyN && confirm("Обновить уже внесённые операции по этой регулярной (" + applyN + " шт.) новой суммой, категорией и комментарием?\nОтмена — изменятся только будущие.")){
     applyOps.forEach(function(o){ o.type = data.type; o.cat = data.cat; o.amount = data.amount; o.comment = data.comment; });
+  }
+  if(mig && mig.moves.length && confirm("Перенести уже внесённые операции (" + mig.moves.length + " шт.) на новые даты расписания?\nОтмена — останутся на прежних датах, повторно они не внесутся.")){
+    mig.moves.forEach(function(m){ m.op.date = m.to; });
   }
   saveData();
   closeRecSheet();
@@ -4091,7 +4125,7 @@ async function checkForUpdate(){
   btn.disabled = false;
 }
 
-var APP_VERSION = "2026-11-01.1";
+var APP_VERSION = "2026-11-01.2";
 var BACKUP_KEY = "savings-app-last-backup";
 var EXPORT_TS_KEY = "savings-app-last-export-ts";
 var IMPORT_TS_KEY = "savings-app-last-import-ts";
