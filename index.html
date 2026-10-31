@@ -393,7 +393,7 @@
     border-top:1px solid var(--border);
   }
   .to-top{
-    position:fixed; left:16px; bottom:88px; z-index:24; width:44px; height:44px; border-radius:50%;
+    position:fixed; right:24px; bottom:152px; z-index:24; width:44px; height:44px; border-radius:50%;
     background:var(--surface); color:var(--accent-ink); border:1px solid var(--border); font-size:calc(20px * var(--fs,1)); line-height:1;
     box-shadow:0 2px 10px rgba(20,30,50,.14); display:flex; align-items:center; justify-content:center;
     opacity:0; pointer-events:none; transform:translateY(8px); transition:opacity .2s, transform .2s;
@@ -446,6 +446,14 @@
   }
 
   input.secret{-webkit-text-security:disc; text-security:disc;}
+  .launch-note{position:fixed; left:10px; right:10px; top:10px; z-index:400; background:#1f2a3d; color:#fff; border-radius:14px; padding:12px 14px; box-shadow:0 6px 24px rgba(0,0,0,.35); font-size:calc(13.5px * var(--fs,1));}
+  .launch-note[hidden]{display:none;}
+  .ln-text{cursor:pointer;}
+  .ln-text b{display:block; margin-bottom:2px;}
+  .ln-text span{display:block; opacity:.75; word-break:break-all; font-size:calc(12px * var(--fs,1));}
+  .ln-btns{display:flex; gap:8px; margin-top:10px; align-items:center;}
+  .ln-btns button{border:1px solid rgba(255,255,255,.35); background:rgba(255,255,255,.12); color:#fff; border-radius:10px; padding:8px 12px; font-size:inherit;}
+  .ln-btns .ln-x{margin-left:auto; padding:8px 11px;}
   .sync-btn{position:absolute; right:62px; top:14px; width:40px; height:40px; border-radius:50%; border:none; background:rgba(255,255,255,.16); color:#fff; display:flex; align-items:center; justify-content:center; font-size:22px; line-height:1;}
   .sync-btn.spin span{display:inline-block; animation:syncspin 1s linear infinite;}
   .sync-btn.has-dirty::after{content:""; position:absolute; top:4px; right:4px; width:11px; height:11px; border-radius:50%; background:#ffd400; border:2px solid #fff;}
@@ -497,7 +505,10 @@
   <div class="card" id="cardMonth" hidden>
     <div class="card-header-row" style="margin-bottom:12px;">
       <h2 id="monthTitle">Месяц</h2>
-      <button type="button" class="btn ghost hist-refresh-btn" style="flex:0 0 auto; width:auto;" onclick="showScreen('ops')">Операции ›</button>
+      <div style="display:flex; gap:8px; flex:0 0 auto;">
+        <button type="button" class="btn ghost hist-refresh-btn" style="flex:0 0 auto; width:auto;" onclick="toggleSection('month')" aria-label="Диаграмма и показатели" title="Диаграмма и показатели">📊 <span class="chev" id="monthChev">▾</span></button>
+        <button type="button" class="btn ghost hist-refresh-btn" style="flex:0 0 auto; width:auto;" onclick="showScreen('ops')">Операции ›</button>
+      </div>
     </div>
     <div class="ops-sum">
       <div class="c"><div class="l">Доходы</div><div class="v pos" id="mInc">0</div></div>
@@ -505,7 +516,6 @@
       <div class="c"><div class="l">Разница</div><div class="v" id="mDiff">0</div></div>
     </div>
     <div id="mTop" style="font-size:calc(13px * var(--fs,1)); color:var(--ink-soft); line-height:1.5;"></div>
-    <div class="m-toggle" onclick="toggleSection('month')"><span>Диаграмма и показатели</span><span class="chev" id="monthChev">▾</span></div>
     <div id="monthBody" hidden>
       <div class="m-bars" id="mBars"></div>
       <div class="m-legend"><span><b style="background:var(--pos-bar)"></b>доходы</span><span><b style="background:var(--primary)"></b>расходы</span></div>
@@ -1283,6 +1293,15 @@
 <div class="overlay" id="msgOverlay" hidden style="z-index:300;"><div class="sheet-panel"><h3 id="msgTitle"></h3><p id="msgText" style="white-space:pre-wrap; font-size:15px;"></p><div class="btn-row sheet-footer"><button type="button" class="btn primary" onclick="closeMsg()">Понятно</button></div></div></div>
 <div class="overlay" id="conflictOverlay" hidden style="z-index:290;"><div class="sheet-panel"><h3>Требует решения</h3><div id="conflictList"></div><div class="btn-row sheet-footer"><button type="button" class="btn ghost" onclick="closeConflicts()">Решу позже</button></div></div></div>
 
+<div id="launchNote" class="launch-note" hidden>
+  <div class="ln-text" onclick="copyAppUrl()"><b>Нажмите, чтобы скопировать адрес приложения</b><span id="launchUrl"></span></div>
+  <div class="ln-btns">
+    <button type="button" onclick="shareAppUrl()">Поделиться</button>
+    <button type="button" onclick="openInChrome()">Открыть в Chrome</button>
+    <button type="button" class="ln-x" onclick="closeLaunchNote(true)" aria-label="Закрыть">✕</button>
+  </div>
+</div>
+
 <div class="toast" id="toast">
   <span id="toastText"></span>
   <button type="button" id="toastUndoBtn" class="toast-undo" hidden onclick="runUndo()" aria-label="Отменить">↶ Отменить</button>
@@ -1844,7 +1863,7 @@ function renderOpenDeposits(){
         '</div>';
     }
 
-    var collapsed = !!uiPrefs.depsCollapsed[a.id];
+    var collapsed = uiPrefs.depsCollapsed[a.id] !== false;
     var div = document.createElement("div");
     div.className = "deposit-term-item";
     div.innerHTML =
@@ -3329,7 +3348,7 @@ function renderOpsStale(){
 function saveUiPrefs(){ try{ localStorage.setItem(UI_KEY, JSON.stringify(uiPrefs)); }catch(e){} }
 
 function toggleDepCard(id){
-  if(uiPrefs.depsCollapsed[id]) delete uiPrefs.depsCollapsed[id]; else uiPrefs.depsCollapsed[id] = true;
+  uiPrefs.depsCollapsed[id] = (uiPrefs.depsCollapsed[id] === false);
   saveUiPrefs();
   renderOpenDeposits();
 }
@@ -4075,7 +4094,7 @@ async function checkForUpdate(){
   btn.disabled = false;
 }
 
-var APP_VERSION = "2026-10-30.3";
+var APP_VERSION = "2026-10-31.1";
 var BACKUP_KEY = "savings-app-last-backup";
 var EXPORT_TS_KEY = "savings-app-last-export-ts";
 var IMPORT_TS_KEY = "savings-app-last-import-ts";
@@ -4857,6 +4876,46 @@ function syncFileToBackup(parsed){
 }
 
 
+/* ===== Сообщение при запуске: адрес приложения ===== */
+var LAUNCH_HIDE_KEY = "savings-app-hide-launch";
+function appShareUrl(){ return /^https?:$/.test(location.protocol) ? (APP_URL || location.href.split("#")[0]) : APP_URL; }
+function isStandalone(){
+  try{ return (window.matchMedia && window.matchMedia("(display-mode: standalone)").matches) || window.navigator.standalone === true; }catch(e){ return false; }
+}
+function showLaunchNote(){
+  if(isStandalone() || lsGet(LAUNCH_HIDE_KEY) === "1") return;
+  var url = appShareUrl(); if(!url) return;
+  document.getElementById("launchUrl").textContent = url;
+  document.getElementById("launchNote").hidden = false;
+}
+function closeLaunchNote(forever){
+  document.getElementById("launchNote").hidden = true;
+  if(forever) lsSet(LAUNCH_HIDE_KEY, "1");
+}
+function copyAppUrl(){
+  var url = appShareUrl();
+  function fallback(){
+    try{ var t = document.createElement("textarea"); t.value = url; t.style.position = "fixed"; t.style.opacity = "0"; document.body.appendChild(t); t.select(); document.execCommand("copy"); document.body.removeChild(t); toast("Адрес скопирован"); }
+    catch(e){ toast("Не удалось скопировать"); }
+  }
+  if(navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(url).then(function(){ toast("Адрес скопирован"); }, fallback);
+  else fallback();
+}
+function shareAppUrl(){
+  var url = appShareUrl();
+  if(navigator.share) navigator.share({ title: "Личные накопления", url: url }).catch(function(){});
+  else copyAppUrl();
+}
+function openInChrome(){
+  var url = appShareUrl();
+  if(/Android/i.test(navigator.userAgent)){
+    var m = url.match(/^https?:\/\/(.*)$/);
+    if(m){ location.href = "intent://" + m[1] + "#Intent;scheme=https;package=com.android.chrome;end"; return; }
+  }
+  window.open(url, "_blank");
+}
+
+
 async function init(){
   initServiceCards();
   await loadData();
@@ -4867,6 +4926,7 @@ async function init(){
   initUpdates();
   syncMarkDirty();
   renderSyncUI();
+  showLaunchNote();
   if(DATA.appLock && DATA.appLock.enabled && DATA.appLock.hash){
     document.getElementById("lockOverlay").hidden = false;
     var lockInput = document.getElementById("lockInput");
