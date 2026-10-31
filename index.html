@@ -995,6 +995,7 @@
     <div class="about-row"><span>Версия</span><span id="aboutVersion">—</span></div>
     <div class="about-row"><span>Последний экспорт</span><span id="aboutExport">—</span></div>
     <div class="about-row"><span>Последнее восстановление</span><span id="aboutImport">—</span></div>
+    <div class="about-row"><span>Сообщение с адресом при запуске</span><label class="switch"><input type="checkbox" id="launchToggle" onchange="setLaunchNote(this.checked)"><span class="slider"></span></label></div>
     <div class="about-row"><span>Синхронизация</span><span id="aboutSync">—</span></div>
     <div class="about-row"><span>Режим</span><span id="aboutMode">—</span></div>
     <button type="button" class="btn ghost" style="margin-top:12px;" id="checkUpdBtn" onclick="checkForUpdate()">Проверить обновление</button>
@@ -4094,7 +4095,7 @@ async function checkForUpdate(){
   btn.disabled = false;
 }
 
-var APP_VERSION = "2026-10-31.1";
+var APP_VERSION = "2026-10-31.2";
 var BACKUP_KEY = "savings-app-last-backup";
 var EXPORT_TS_KEY = "savings-app-last-export-ts";
 var IMPORT_TS_KEY = "savings-app-last-import-ts";
@@ -4166,6 +4167,7 @@ function renderAbout(){
   document.getElementById("aboutImport").textContent = imp ? formatDateTimeRu(imp) : "ещё не делали";
   var btn = document.getElementById("rollbackImportBtn");
   if(btn) btn.hidden = !lsGet(PRE_IMPORT_KEY);
+  var lt = document.getElementById("launchToggle"); if(lt) lt.checked = lsGet(LAUNCH_HIDE_KEY) !== "1";
   var md = document.getElementById("aboutMode");
   if(md && md.textContent === "—") md.textContent = isServedOverHttp() ? "по ссылке, работает офлайн" : "из файла";
 }
@@ -4887,6 +4889,9 @@ function showLaunchNote(){
   var url = appShareUrl(); if(!url) return;
   document.getElementById("launchUrl").textContent = url;
   document.getElementById("launchNote").hidden = false;
+}
+function setLaunchNote(on){
+  if(on) lsRemove(LAUNCH_HIDE_KEY); else { lsSet(LAUNCH_HIDE_KEY, "1"); document.getElementById("launchNote").hidden = true; }
 }
 function closeLaunchNote(forever){
   document.getElementById("launchNote").hidden = true;
