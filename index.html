@@ -446,14 +446,6 @@
   }
 
   input.secret{-webkit-text-security:disc; text-security:disc;}
-  .launch-note{position:fixed; left:10px; right:10px; top:10px; z-index:400; background:#1f2a3d; color:#fff; border-radius:14px; padding:12px 14px; box-shadow:0 6px 24px rgba(0,0,0,.35); font-size:calc(13.5px * var(--fs,1));}
-  .launch-note[hidden]{display:none;}
-  .ln-text{cursor:pointer;}
-  .ln-text b{display:block; margin-bottom:2px;}
-  .ln-text span{display:block; opacity:.75; word-break:break-all; font-size:calc(12px * var(--fs,1));}
-  .ln-btns{display:flex; gap:8px; margin-top:10px; align-items:center;}
-  .ln-btns button{border:1px solid rgba(255,255,255,.35); background:rgba(255,255,255,.12); color:#fff; border-radius:10px; padding:8px 12px; font-size:inherit;}
-  .ln-btns .ln-x{margin-left:auto; padding:8px 11px;}
   .sync-btn{position:absolute; right:62px; top:14px; width:40px; height:40px; border-radius:50%; border:none; background:rgba(255,255,255,.16); color:#fff; display:flex; align-items:center; justify-content:center; font-size:22px; line-height:1;}
   .sync-btn.spin span{display:inline-block; animation:syncspin 1s linear infinite;}
   .sync-btn.has-dirty::after{content:""; position:absolute; top:4px; right:4px; width:11px; height:11px; border-radius:50%; background:#ffd400; border:2px solid #fff;}
@@ -578,7 +570,11 @@
   </div>
 
   <div class="card" id="cardDeposits">
-    <h2>Депозиты</h2>
+    <div class="card-header-row collapsible" onclick="toggleSection('deps')">
+      <h2>Депозиты <span class="chev" id="depsChev">▾</span></h2>
+      <span class="coll-summary" id="depsSummary"></span>
+    </div>
+    <div id="depsBody" class="coll-body" hidden>
     <div class="split-two">
       <div class="box dep">
         <div class="lbl">На депозитах <span class="box-pct" id="depPct">0%</span></div>
@@ -593,6 +589,7 @@
       </div>
     </div>
     <div id="openDepositsList"></div>
+    </div>
   </div>
 
   <div id="homeEmpty" class="empty" hidden>
@@ -995,7 +992,6 @@
     <div class="about-row"><span>Версия</span><span id="aboutVersion">—</span></div>
     <div class="about-row"><span>Последний экспорт</span><span id="aboutExport">—</span></div>
     <div class="about-row"><span>Последнее восстановление</span><span id="aboutImport">—</span></div>
-    <div class="about-row"><span>Сообщение с адресом при запуске</span><label class="switch"><input type="checkbox" id="launchToggle" onchange="setLaunchNote(this.checked)"><span class="slider"></span></label></div>
     <div class="about-row"><span>Синхронизация</span><span id="aboutSync">—</span></div>
     <div class="about-row"><span>Режим</span><span id="aboutMode">—</span></div>
     <button type="button" class="btn ghost" style="margin-top:12px;" id="checkUpdBtn" onclick="checkForUpdate()">Проверить обновление</button>
@@ -1293,15 +1289,6 @@
 <div class="overlay" id="syncBusy" hidden style="z-index:300;"><div class="sheet-panel" style="text-align:center;"><h3 id="syncBusyText">Синхронизация…</h3></div></div>
 <div class="overlay" id="msgOverlay" hidden style="z-index:300;"><div class="sheet-panel"><h3 id="msgTitle"></h3><p id="msgText" style="white-space:pre-wrap; font-size:15px;"></p><div class="btn-row sheet-footer"><button type="button" class="btn primary" onclick="closeMsg()">Понятно</button></div></div></div>
 <div class="overlay" id="conflictOverlay" hidden style="z-index:290;"><div class="sheet-panel"><h3>Требует решения</h3><div id="conflictList"></div><div class="btn-row sheet-footer"><button type="button" class="btn ghost" onclick="closeConflicts()">Решу позже</button></div></div></div>
-
-<div id="launchNote" class="launch-note" hidden>
-  <div class="ln-text" onclick="copyAppUrl()"><b>Нажмите, чтобы скопировать адрес приложения</b><span id="launchUrl"></span></div>
-  <div class="ln-btns">
-    <button type="button" onclick="shareAppUrl()">Поделиться</button>
-    <button type="button" onclick="openInChrome()">Открыть в Chrome</button>
-    <button type="button" class="ln-x" onclick="closeLaunchNote(true)" aria-label="Закрыть">✕</button>
-  </div>
-</div>
 
 <div class="toast" id="toast">
   <span id="toastText"></span>
@@ -1609,6 +1596,7 @@ function renderHome(){
     (t.rUSD ? fmt(t.depUAH / t.rUSD) : "0") + " $ · " + (t.rEUR ? fmt(t.depUAH / t.rEUR) : "0") + " €";
 
   document.getElementById("nonDepPct").textContent = nonDepPct + "%";
+  document.getElementById("depsSummary").textContent = "на депозитах " + depPct + "%";
   document.getElementById("nonDepVal").textContent = fmt(nonDepUAHEquiv) + " грн";
   document.getElementById("nonDepValSub").textContent =
     (t.rUSD ? fmt(nonDepUAHEquiv / t.rUSD) : "0") + " $ · " + (t.rEUR ? fmt(nonDepUAHEquiv / t.rEUR) : "0") + " €";
@@ -2800,8 +2788,8 @@ function deleteAccount(id){
 
 /* ===== Секции, журнал счетов, переводы ===== */
 var UI_KEY = "savings-app-ui";
-var uiPrefs = { history: false, risks: false, month: true, depsCollapsed: {}, svcOpen: {} };
-try{ var _u = JSON.parse(localStorage.getItem(UI_KEY) || "null"); if(_u && typeof _u === "object"){ uiPrefs.history = !!_u.history; uiPrefs.risks = !!_u.risks; if(typeof _u.month === "boolean") uiPrefs.month = _u.month; if(_u.depsCollapsed && typeof _u.depsCollapsed === "object") uiPrefs.depsCollapsed = _u.depsCollapsed; if(_u.svcOpen && typeof _u.svcOpen === "object") uiPrefs.svcOpen = _u.svcOpen; } }catch(e){}
+var uiPrefs = { history: false, risks: false, month: true, deps: false, depsCollapsed: {}, svcOpen: {} };
+try{ var _u = JSON.parse(localStorage.getItem(UI_KEY) || "null"); if(_u && typeof _u === "object"){ uiPrefs.history = !!_u.history; uiPrefs.risks = !!_u.risks; uiPrefs.deps = !!_u.deps; if(typeof _u.month === "boolean") uiPrefs.month = _u.month; if(_u.depsCollapsed && typeof _u.depsCollapsed === "object") uiPrefs.depsCollapsed = _u.depsCollapsed; if(_u.svcOpen && typeof _u.svcOpen === "object") uiPrefs.svcOpen = _u.svcOpen; } }catch(e){}
 
 function pluralRu(n, forms){
   var a = Math.abs(n) % 100, b = a % 10;
@@ -2823,7 +2811,7 @@ function toggleSection(name){
 }
 
 function applySections(){
-  [["history","historyBody","historyChev"],["risks","riskList","risksChev"],["month","monthBody","monthChev"]].forEach(function(r){
+  [["history","historyBody","historyChev"],["risks","riskList","risksChev"],["month","monthBody","monthChev"],["deps","depsBody","depsChev"]].forEach(function(r){
     var body = document.getElementById(r[1]), chev = document.getElementById(r[2]);
     if(!body || !chev) return;
     body.hidden = !uiPrefs[r[0]];
@@ -4095,7 +4083,7 @@ async function checkForUpdate(){
   btn.disabled = false;
 }
 
-var APP_VERSION = "2026-10-31.2";
+var APP_VERSION = "2026-10-31.3";
 var BACKUP_KEY = "savings-app-last-backup";
 var EXPORT_TS_KEY = "savings-app-last-export-ts";
 var IMPORT_TS_KEY = "savings-app-last-import-ts";
@@ -4167,7 +4155,6 @@ function renderAbout(){
   document.getElementById("aboutImport").textContent = imp ? formatDateTimeRu(imp) : "ещё не делали";
   var btn = document.getElementById("rollbackImportBtn");
   if(btn) btn.hidden = !lsGet(PRE_IMPORT_KEY);
-  var lt = document.getElementById("launchToggle"); if(lt) lt.checked = lsGet(LAUNCH_HIDE_KEY) !== "1";
   var md = document.getElementById("aboutMode");
   if(md && md.textContent === "—") md.textContent = isServedOverHttp() ? "по ссылке, работает офлайн" : "из файла";
 }
@@ -4878,48 +4865,6 @@ function syncFileToBackup(parsed){
 }
 
 
-/* ===== Сообщение при запуске: адрес приложения ===== */
-var LAUNCH_HIDE_KEY = "savings-app-hide-launch";
-function appShareUrl(){ return /^https?:$/.test(location.protocol) ? (APP_URL || location.href.split("#")[0]) : APP_URL; }
-function isStandalone(){
-  try{ return (window.matchMedia && window.matchMedia("(display-mode: standalone)").matches) || window.navigator.standalone === true; }catch(e){ return false; }
-}
-function showLaunchNote(){
-  if(isStandalone() || lsGet(LAUNCH_HIDE_KEY) === "1") return;
-  var url = appShareUrl(); if(!url) return;
-  document.getElementById("launchUrl").textContent = url;
-  document.getElementById("launchNote").hidden = false;
-}
-function setLaunchNote(on){
-  if(on) lsRemove(LAUNCH_HIDE_KEY); else { lsSet(LAUNCH_HIDE_KEY, "1"); document.getElementById("launchNote").hidden = true; }
-}
-function closeLaunchNote(forever){
-  document.getElementById("launchNote").hidden = true;
-  if(forever) lsSet(LAUNCH_HIDE_KEY, "1");
-}
-function copyAppUrl(){
-  var url = appShareUrl();
-  function fallback(){
-    try{ var t = document.createElement("textarea"); t.value = url; t.style.position = "fixed"; t.style.opacity = "0"; document.body.appendChild(t); t.select(); document.execCommand("copy"); document.body.removeChild(t); toast("Адрес скопирован"); }
-    catch(e){ toast("Не удалось скопировать"); }
-  }
-  if(navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(url).then(function(){ toast("Адрес скопирован"); }, fallback);
-  else fallback();
-}
-function shareAppUrl(){
-  var url = appShareUrl();
-  if(navigator.share) navigator.share({ title: "Личные накопления", url: url }).catch(function(){});
-  else copyAppUrl();
-}
-function openInChrome(){
-  var url = appShareUrl();
-  if(/Android/i.test(navigator.userAgent)){
-    var m = url.match(/^https?:\/\/(.*)$/);
-    if(m){ location.href = "intent://" + m[1] + "#Intent;scheme=https;package=com.android.chrome;end"; return; }
-  }
-  window.open(url, "_blank");
-}
-
 
 async function init(){
   initServiceCards();
@@ -4931,7 +4876,6 @@ async function init(){
   initUpdates();
   syncMarkDirty();
   renderSyncUI();
-  showLaunchNote();
   if(DATA.appLock && DATA.appLock.enabled && DATA.appLock.hash){
     document.getElementById("lockOverlay").hidden = false;
     var lockInput = document.getElementById("lockInput");
