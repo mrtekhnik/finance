@@ -570,11 +570,7 @@
   </div>
 
   <div class="card" id="cardDeposits">
-    <div class="card-header-row collapsible" onclick="toggleSection('deps')">
-      <h2>Депозиты <span class="chev" id="depsChev">▾</span></h2>
-      <span class="coll-summary" id="depsSummary"></span>
-    </div>
-    <div id="depsBody" class="coll-body" hidden>
+    <h2>Депозиты</h2>
     <div class="split-two">
       <div class="box dep">
         <div class="lbl">На депозитах <span class="box-pct" id="depPct">0%</span></div>
@@ -588,7 +584,9 @@
         <div class="box-extra-inline" id="nonDepUahRaw">Гривной: 0 грн</div>
       </div>
     </div>
-    <div id="openDepositsList"></div>
+    <div class="m-toggle" onclick="toggleSection('deps')"><span>Открытые депозиты</span><span class="chev" id="depsChev">▾</span></div>
+    <div id="depsBody" hidden>
+      <div id="openDepositsList"></div>
     </div>
   </div>
 
@@ -1596,7 +1594,6 @@ function renderHome(){
     (t.rUSD ? fmt(t.depUAH / t.rUSD) : "0") + " $ · " + (t.rEUR ? fmt(t.depUAH / t.rEUR) : "0") + " €";
 
   document.getElementById("nonDepPct").textContent = nonDepPct + "%";
-  document.getElementById("depsSummary").textContent = "на депозитах " + depPct + "%";
   document.getElementById("nonDepVal").textContent = fmt(nonDepUAHEquiv) + " грн";
   document.getElementById("nonDepValSub").textContent =
     (t.rUSD ? fmt(nonDepUAHEquiv / t.rUSD) : "0") + " $ · " + (t.rEUR ? fmt(nonDepUAHEquiv / t.rEUR) : "0") + " €";
@@ -4083,7 +4080,7 @@ async function checkForUpdate(){
   btn.disabled = false;
 }
 
-var APP_VERSION = "2026-10-31.3";
+var APP_VERSION = "2026-10-31.4";
 var BACKUP_KEY = "savings-app-last-backup";
 var EXPORT_TS_KEY = "savings-app-last-export-ts";
 var IMPORT_TS_KEY = "savings-app-last-import-ts";
