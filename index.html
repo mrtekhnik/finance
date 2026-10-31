@@ -507,7 +507,6 @@
       <div class="c"><div class="l">Расходы</div><div class="v" id="mExp">0</div></div>
       <div class="c"><div class="l">Разница</div><div class="v" id="mDiff">0</div></div>
     </div>
-    <div id="mTop" style="font-size:calc(13px * var(--fs,1)); color:var(--ink-soft); line-height:1.5;"></div>
     <div id="monthBody" hidden>
       <div class="m-bars" id="mBars"></div>
       <div class="m-legend"><span><b style="background:var(--pos-bar)"></b>доходы</span><span><b style="background:var(--primary)"></b>расходы</span></div>
@@ -658,15 +657,21 @@
     </div>
   </div>
   <div class="card" id="recCard">
-    <div class="card-header-row" style="margin-bottom:8px;">
-      <h2>Регулярные</h2>
-      <button type="button" class="btn ghost hist-refresh-btn" style="flex:0 0 auto; width:auto;" onclick="openRecSheet()">+ Добавить</button>
+    <div class="card-header-row collapsible" onclick="toggleSection('rec')">
+      <h2>Регулярные <span class="chev" id="recChev">▾</span></h2>
+      <button type="button" class="btn ghost hist-refresh-btn" style="flex:0 0 auto; width:auto;" onclick="event.stopPropagation(); openRecSheet()">+ Добавить</button>
     </div>
-    <div id="recList"></div>
+    <div id="recBody" class="coll-body" hidden>
+      <div id="recList"></div>
+    </div>
   </div>
   <div class="card" id="opBreakdownCard">
-    <h2>Расходы по категориям</h2>
-    <div id="opBreakdown"></div>
+    <div class="card-header-row collapsible" onclick="toggleSection('cats')">
+      <h2>Расходы по категориям <span class="chev" id="catsChev">▾</span></h2>
+    </div>
+    <div id="catsBody" class="coll-body" hidden>
+      <div id="opBreakdown"></div>
+    </div>
   </div>
   <div class="card">
     <h2>Операции за месяц</h2>
@@ -2785,8 +2790,8 @@ function deleteAccount(id){
 
 /* ===== Секции, журнал счетов, переводы ===== */
 var UI_KEY = "savings-app-ui";
-var uiPrefs = { history: false, risks: false, month: true, deps: false, depsCollapsed: {}, svcOpen: {} };
-try{ var _u = JSON.parse(localStorage.getItem(UI_KEY) || "null"); if(_u && typeof _u === "object"){ uiPrefs.history = !!_u.history; uiPrefs.risks = !!_u.risks; uiPrefs.deps = !!_u.deps; if(typeof _u.month === "boolean") uiPrefs.month = _u.month; if(_u.depsCollapsed && typeof _u.depsCollapsed === "object") uiPrefs.depsCollapsed = _u.depsCollapsed; if(_u.svcOpen && typeof _u.svcOpen === "object") uiPrefs.svcOpen = _u.svcOpen; } }catch(e){}
+var uiPrefs = { history: false, risks: false, month: true, deps: false, rec: false, cats: false, depsCollapsed: {}, svcOpen: {} };
+try{ var _u = JSON.parse(localStorage.getItem(UI_KEY) || "null"); if(_u && typeof _u === "object"){ uiPrefs.history = !!_u.history; uiPrefs.risks = !!_u.risks; uiPrefs.deps = !!_u.deps; uiPrefs.rec = !!_u.rec; uiPrefs.cats = !!_u.cats; if(typeof _u.month === "boolean") uiPrefs.month = _u.month; if(_u.depsCollapsed && typeof _u.depsCollapsed === "object") uiPrefs.depsCollapsed = _u.depsCollapsed; if(_u.svcOpen && typeof _u.svcOpen === "object") uiPrefs.svcOpen = _u.svcOpen; } }catch(e){}
 
 function pluralRu(n, forms){
   var a = Math.abs(n) % 100, b = a % 10;
@@ -2808,7 +2813,7 @@ function toggleSection(name){
 }
 
 function applySections(){
-  [["history","historyBody","historyChev"],["risks","riskList","risksChev"],["month","monthBody","monthChev"],["deps","depsBody","depsChev"]].forEach(function(r){
+  [["history","historyBody","historyChev"],["risks","riskList","risksChev"],["month","monthBody","monthChev"],["deps","depsBody","depsChev"],["rec","recBody","recChev"],["cats","catsBody","catsChev"]].forEach(function(r){
     var body = document.getElementById(r[1]), chev = document.getElementById(r[2]);
     if(!body || !chev) return;
     body.hidden = !uiPrefs[r[0]];
@@ -3255,8 +3260,6 @@ function renderMonthCard(){
   document.getElementById("mExp").textContent = fmt(t.exp);
   var d = t.inc - t.exp, de = document.getElementById("mDiff");
   de.textContent = signedMoney(d); de.className = "v " + (d > 0 ? "pos" : (d < 0 ? "neg" : ""));
-  var cats = Object.keys(t.byCat).sort(function(a,b){ return t.byCat[b] - t.byCat[a]; }).slice(0, 3);
-  document.getElementById("mTop").innerHTML = cats.length ? "Больше всего: " + cats.map(function(c){ return esc(c) + " " + fmt(t.byCat[c]); }).join(" · ") : "";
   var months = [], p = key.split("-"), y = +p[0], m = +p[1] - 1;
   for(var i = 5; i >= 0; i--){
     var mm = m - i, yy = y + Math.floor(mm / 12); mm = ((mm % 12) + 12) % 12;
@@ -3958,8 +3961,16 @@ function saveRec(ev){
   var probe = Object.assign({ handled: rec ? (rec.handled || {}) : {} }, data);
   var pastN = recDue(probe).length;
   if(data.auto && data.active && pastN > 1 && !confirm("Будут сразу внесены операции за прошедшие даты: " + pastN + ". Продолжить?")) return false;
+  var applyN = 0, applyOps = [];
+  if(rec){
+    applyOps = DATA.ops.filter(function(o){ return o.recId === rec.id && (o.type !== data.type || o.cat !== data.cat || o.amount !== data.amount || (o.comment || "") !== data.comment); });
+    applyN = applyOps.length;
+  }
   if(rec) Object.assign(rec, data);
   else DATA.recurring.push(Object.assign({ id: uid(), handled: {} }, data));
+  if(applyN && confirm("Обновить уже внесённые операции по этой регулярной (" + applyN + " шт.) новой суммой, категорией и комментарием?\nОтмена — изменятся только будущие.")){
+    applyOps.forEach(function(o){ o.type = data.type; o.cat = data.cat; o.amount = data.amount; o.comment = data.comment; });
+  }
   saveData();
   closeRecSheet();
   processRecurring();
@@ -4080,7 +4091,7 @@ async function checkForUpdate(){
   btn.disabled = false;
 }
 
-var APP_VERSION = "2026-10-31.4";
+var APP_VERSION = "2026-11-01.1";
 var BACKUP_KEY = "savings-app-last-backup";
 var EXPORT_TS_KEY = "savings-app-last-export-ts";
 var IMPORT_TS_KEY = "savings-app-last-import-ts";
