@@ -1158,11 +1158,19 @@
     <form class="sheet" onsubmit="return submitTransfer(event)">
       <div>
         <label>Откуда</label>
-        <select id="tFrom" onchange="onTransferChange('from')"></select>
+        <div class="btn-row">
+          <select id="tFromBank" onchange="onTransferBank('from')" style="flex:1; min-width:0;"></select>
+          <select id="tFrom" onchange="onTransferChange('from')" style="flex:1.4; min-width:0;"></select>
+        </div>
+        <div class="hint-line" id="tFromBal"></div>
       </div>
       <div>
         <label>Куда</label>
-        <select id="tTo" onchange="onTransferChange('to')"></select>
+        <div class="btn-row">
+          <select id="tToBank" onchange="onTransferBank('to')" style="flex:1; min-width:0;"></select>
+          <select id="tTo" onchange="onTransferChange('to')" style="flex:1.4; min-width:0;"></select>
+        </div>
+        <div class="hint-line" id="tToBal"></div>
       </div>
       <div>
         <label id="tOutLabel">Сумма списания</label>
@@ -2881,7 +2889,7 @@ function diffAccount(o, n){
 
 function formatChangeLines(changes, cur){
   return (changes || []).map(function(c){
-    if(c.key === "amount") return "Сумма: " + fmt(c.from) + " → " + fmt(c.to) + " " + currencySymbol(cur);
+    if(c.key === "amount"){ var df = round2(Number(c.to) - Number(c.from)); return "Сумма: " + fmt(c.from) + " → " + fmt(c.to) + " " + currencySymbol(cur) + (df ? " (" + signedMoney(df) + ")" : ""); }
     if(c.key === "rate") return "Ставка: " + c.from + "% → " + c.to + "%";
     if(c.key === "topUpsAdded" || c.key === "topUpsRemoved") return c.field + ": " + c.to;
     return c.field + ": " + (c.from === "" ? "—" : c.from) + " → " + (c.to === "" ? "—" : c.to);
@@ -2942,18 +2950,47 @@ function closeLogSheet(){ document.getElementById("logOverlay").hidden = true; }
 /* --- переводы --- */
 function openTransferSheet(){
   if(DATA.accounts.length < 2){ toast("Для перевода нужно минимум два счёта"); return; }
-  var opts = DATA.accounts.map(function(a){
-    return '<option value="' + a.id + '">' + esc(accLabel(a)) + ' — ' + fmt(a.amount) + '</option>';
-  }).join("");
-  var from = document.getElementById("tFrom"), to = document.getElementById("tTo");
-  from.innerHTML = opts; to.innerHTML = opts;
-  from.selectedIndex = 0; to.selectedIndex = 1;
+  var all = transferSorted(DATA.accounts);
+  transferFillBanks("from", all[0].bank);
+  transferFillAccs("from", all[0].id);
+  var second = all[1];
+  transferFillBanks("to", second.bank);
+  transferFillAccs("to", second.id);
   document.getElementById("tOut").value = "";
   document.getElementById("tIn").value = "";
   document.getElementById("tDate").value = todayLocalISO();
   document.getElementById("tComment").value = "";
   onTransferChange("from");
   document.getElementById("transferOverlay").hidden = false;
+}
+function transferSorted(list){
+  return list.slice().sort(function(a, b){
+    return (a.currency === "UAH" ? 0 : 1) - (b.currency === "UAH" ? 0 : 1);
+  });
+}
+function transferBanks(){
+  var seen = {}, out = [];
+  DATA.banks.concat(DATA.accounts.map(function(a){ return a.bank; })).forEach(function(b){
+    if(!seen[b] && DATA.accounts.some(function(a){ return a.bank === b; })){ seen[b] = 1; out.push(b); }
+  });
+  return out;
+}
+function transferFillBanks(side, selected){
+  var el = document.getElementById(side === "from" ? "tFromBank" : "tToBank");
+  el.innerHTML = transferBanks().map(function(b){ return '<option value="' + esc(b) + '">' + esc(b) + '</option>'; }).join("");
+  if(selected) el.value = selected;
+}
+function transferFillAccs(side, selectedId){
+  var bank = document.getElementById(side === "from" ? "tFromBank" : "tToBank").value;
+  var el = document.getElementById(side === "from" ? "tFrom" : "tTo");
+  el.innerHTML = transferSorted(DATA.accounts.filter(function(a){ return a.bank === bank; })).map(function(a){
+    return '<option value="' + a.id + '">' + esc((a.name || a.type) + " (" + currencySymbol(a.currency) + ")") + '</option>';
+  }).join("");
+  if(selectedId) el.value = selectedId;
+}
+function onTransferBank(side){
+  transferFillAccs(side);
+  onTransferChange(side);
 }
 function closeTransferSheet(){ document.getElementById("transferOverlay").hidden = true; }
 
@@ -2968,6 +3005,8 @@ var tInManual = false;
 function onTransferChange(src){
   var g = getTransferAccs();
   if(!g.a || !g.b) return;
+  document.getElementById("tFromBal").textContent = "Остаток: " + fmt(g.a.amount) + " " + currencySymbol(g.a.currency);
+  document.getElementById("tToBal").textContent = "Остаток: " + fmt(g.b.amount) + " " + currencySymbol(g.b.currency);
   var diff = g.a.currency !== g.b.currency;
   document.getElementById("tInWrap").hidden = !diff;
   document.getElementById("tOutLabel").textContent = "Сумма списания, " + currencySymbol(g.a.currency);
@@ -4145,7 +4184,7 @@ async function checkForUpdate(){
   btn.disabled = false;
 }
 
-var APP_VERSION = "2026-11-01.3";
+var APP_VERSION = "2026-11-02.1";
 var BACKUP_KEY = "savings-app-last-backup";
 var EXPORT_TS_KEY = "savings-app-last-export-ts";
 var IMPORT_TS_KEY = "savings-app-last-import-ts";
@@ -4927,6 +4966,19 @@ function syncFileToBackup(parsed){
 }
 
 
+
+/* ===== Закрытие окон кликом мимо ===== */
+var OVERLAY_CLOSERS = { addOverlay: "closeAddSheet", goalOverlay: "closeGoalSheet", transferOverlay: "closeTransferSheet", logOverlay: "closeLogSheet",
+  historyOverlay: "closeHistorySheet", logEditOverlay: "closeLogEdit", histEditOverlay: "closeHistEdit", recOverlay: "closeRecSheet",
+  msgOverlay: "closeMsg", conflictOverlay: "closeConflicts" };
+var overlayDownTarget = null;
+document.addEventListener("pointerdown", function(e){ overlayDownTarget = e.target; }, true);
+document.addEventListener("click", function(e){
+  var t = e.target;
+  if(!t || !t.classList || !t.classList.contains("overlay") || t !== overlayDownTarget) return;
+  var fn = OVERLAY_CLOSERS[t.id];
+  if(fn && typeof window[fn] === "function") window[fn]();
+});
 
 async function init(){
   initServiceCards();
