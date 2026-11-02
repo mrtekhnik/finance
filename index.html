@@ -54,7 +54,7 @@
     padding:18px 20px 16px;
     border-radius:0 0 20px 20px;
   }
-  .topbar h1{margin:0; font-size:calc(19px * var(--fs,1)); font-weight:500; letter-spacing:.2px;}
+  .topbar h1{padding-right:128px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; margin:0; font-size:calc(18px * var(--fs,1)); font-weight:500; letter-spacing:.2px;}
   .topbar .sub{font-size:calc(12.5px * var(--fs,1)); opacity:.78; margin-top:2px;}
   .screen{padding:16px 16px 100px; max-width:520px; margin:0 auto;}
   .screen[hidden]{display:none;}
@@ -118,7 +118,7 @@
 
   .home-off{display:none !important;}
   .topbar{position:sticky;}
-  .priv-btn{position:absolute; right:14px; top:14px; width:40px; height:40px; border-radius:50%; border:none; background:rgba(255,255,255,.16); color:#fff; display:flex; align-items:center; justify-content:center;}
+  .priv-btn{position:absolute; right:56px; top:14px; width:38px; height:38px; border-radius:50%; border:none; background:rgba(255,255,255,.16); color:#fff; display:flex; align-items:center; justify-content:center;}
   .priv-btn svg{width:21px; height:21px;}
   .priv-btn.on{background:rgba(255,255,255,.34);}
   .set-row{display:flex; justify-content:space-between; align-items:center; gap:12px; padding:9px 0; border-bottom:1px solid var(--border); font-size:calc(14px * var(--fs,1));}
@@ -446,7 +446,10 @@
   }
 
   input.secret{-webkit-text-security:disc; text-security:disc;}
-  .sync-btn{position:absolute; right:62px; top:14px; width:40px; height:40px; border-radius:50%; border:none; background:rgba(255,255,255,.16); color:#fff; display:flex; align-items:center; justify-content:center; font-size:22px; line-height:1;}
+  .gear-btn{position:absolute; right:12px; top:14px; width:38px; height:38px; border-radius:50%; border:none; background:rgba(255,255,255,.16); color:#fff; display:flex; align-items:center; justify-content:center;}
+  .gear-btn svg{width:21px; height:21px;}
+  .gear-btn.on{background:rgba(255,255,255,.34);}
+  .sync-btn{position:absolute; right:100px; top:14px; width:38px; height:38px; border-radius:50%; border:none; background:rgba(255,255,255,.16); color:#fff; display:flex; align-items:center; justify-content:center; font-size:22px; line-height:1;}
   .sync-btn.spin span{display:inline-block; animation:syncspin 1s linear infinite;}
   .sync-btn.has-dirty::after{content:""; position:absolute; top:4px; right:4px; width:11px; height:11px; border-radius:50%; background:#ffd400; border:2px solid #fff;}
   .sync-btn.has-pend::after{content:""; position:absolute; top:4px; right:4px; width:11px; height:11px; border-radius:50%; background:#f5a623; border:2px solid #fff;}
@@ -466,6 +469,7 @@
 
 <div class="topbar">
   <button type="button" class="priv-btn" id="privBtn" onclick="togglePrivacy()" aria-label="Скрыть или показать суммы"></button>
+  <button type="button" class="gear-btn" id="gearBtn" onclick="showScreen('settings')" aria-label="Настройки приложения"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3.2"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.9.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.9 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.9l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.9.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.9-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.9V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg></button>
   <button type="button" class="sync-btn" id="syncBtn" onclick="syncNow()" aria-label="Синхронизировать"><span>⟳</span></button>
   <h1 id="topbarTitle">Личные накопления</h1>
   <div class="sub" id="topbarSub">Загрузка данных…</div>
@@ -681,46 +685,6 @@
 </div>
 
 <div id="screen-rates" class="screen" hidden>
-  <div class="card" data-svc="prefs">
-    <h2>Оформление и настройки</h2>
-    <div class="set-title" style="margin-top:0;">Внешний вид</div>
-    <div class="set-row"><span>Тема</span>
-      <select id="setTheme" onchange="setSetting('theme', this.value)">
-        <option value="auto">Как в системе</option><option value="light">Светлая</option><option value="dark">Тёмная</option>
-      </select></div>
-    <div class="set-row"><span>Размер текста</span>
-      <select id="setFont" onchange="setSetting('fontScale', this.value)">
-        <option value="small">Мелкий</option><option value="normal">Обычный</option><option value="large">Крупный</option>
-        <option value="xlarge">Очень крупный</option><option value="xxlarge">Максимальный</option>
-      </select></div>
-    <div class="set-row"><span>Заголовки карточек</span>
-      <select id="setHead" onchange="setSetting('headSize', this.value)">
-        <option value="small">Мелкие</option><option value="medium">Средние</option><option value="large">Крупные</option><option value="xlarge">Очень крупные</option>
-      </select></div>
-    <div class="set-title">Фон приложения</div>
-    <div id="bgSwatches" style="display:flex; flex-wrap:wrap; gap:10px; align-items:center;"></div>
-    <div class="set-row" style="border-bottom:none;"><span>Свой цвет</span>
-      <span style="display:flex; gap:8px; align-items:center;"><input type="color" id="setBgColor" style="width:48px; height:38px; padding:2px; border-radius:8px; border:1px solid var(--border); background:var(--surface);" onchange="setBgColor(this.value)"><button type="button" class="btn ghost" style="width:auto; padding:8px 12px;" onclick="setBgColor('')">Сбросить</button></span></div>
-    <div class="set-title">Фон приложения</div>
-    <div id="bgSwatches" style="display:flex; flex-wrap:wrap; gap:10px; align-items:center;"></div>
-    <div class="set-row" style="border-bottom:none;"><span>Свой цвет</span>
-      <span style="display:flex; gap:8px; align-items:center;"><input type="color" id="setBgColor" style="width:48px; height:38px; padding:2px; border-radius:8px; border:1px solid var(--border); background:var(--surface);" onchange="setBgColor(this.value)"><button type="button" class="btn ghost" style="width:auto; padding:8px 12px;" onclick="setBgColor('')">Сбросить</button></span></div>
-    <div class="set-row"><span>Начальный экран</span>
-      <select id="setStart" onchange="setSetting('startScreen', this.value)">
-        <option value="home">Главная</option><option value="ops">Операции</option><option value="accounts">Счета</option>
-      </select></div>
-    <div class="set-row"><span>Скрывать суммы<br><span style="font-size:12px; color:var(--ink-faint);">также кнопка с глазом вверху справа</span></span>
-      <input type="checkbox" id="setHide" style="width:22px;height:22px;" onchange="setSetting('hideAmounts', this.checked)"></div>
-    <div class="set-title">Работа приложения</div>
-    <div class="set-title">Напоминания</div>
-    <div class="set-row"><span>Об окончании депозита, дней до конца</span><input type="number" id="setDepDays" inputmode="numeric" min="1" max="90" onchange="setReminder('depositDays', this.value, 1, 90)"></div>
-    <div class="set-row"><span>Если не вносились операции, дней</span><input type="number" id="setOpsDays" inputmode="numeric" min="3" max="90" onchange="setReminder('staleOpsDays', this.value, 3, 90)"></div>
-    <div class="set-row"><span>Об обновлении копии, дней</span><input type="number" id="setBackupDays" inputmode="numeric" min="7" max="365" onchange="setReminder('backupDays', this.value, 7, 365)"></div>
-    <div class="set-title">Главная: порядок и видимость карточек</div>
-    <div id="homeLayoutList"></div>
-    <button type="button" class="btn ghost" style="margin-top:10px;" onclick="resetHomeLayout()">Сбросить порядок</button>
-  </div>
-
   <div class="card" data-svc="rates">
     <h2>Курсы валют</h2>
     <p style="font-size:calc(12px * var(--fs,1)); color:var(--ink-faint); margin:0 0 10px;">
@@ -928,6 +892,68 @@
     </div>
   </div>
 
+</div>
+
+<div id="screen-settings" class="screen" hidden>
+  <div class="card" data-svc="prefs">
+    <h2>Оформление и настройки</h2>
+    <div class="set-title" style="margin-top:0;">Внешний вид</div>
+    <div class="set-row"><span>Тема</span>
+      <select id="setTheme" onchange="setSetting('theme', this.value)">
+        <option value="auto">Как в системе</option><option value="light">Светлая</option><option value="dark">Тёмная</option>
+      </select></div>
+    <div class="set-row"><span>Размер текста</span>
+      <select id="setFont" onchange="setSetting('fontScale', this.value)">
+        <option value="small">Мелкий</option><option value="normal">Обычный</option><option value="large">Крупный</option>
+        <option value="xlarge">Очень крупный</option><option value="xxlarge">Максимальный</option>
+      </select></div>
+    <div class="set-row"><span>Заголовки карточек</span>
+      <select id="setHead" onchange="setSetting('headSize', this.value)">
+        <option value="small">Мелкие</option><option value="medium">Средние</option><option value="large">Крупные</option><option value="xlarge">Очень крупные</option>
+      </select></div>
+    <div class="set-title">Фон приложения</div>
+    <div id="bgSwatches" style="display:flex; flex-wrap:wrap; gap:10px; align-items:center;"></div>
+    <div class="set-row" style="border-bottom:none;"><span>Свой цвет</span>
+      <span style="display:flex; gap:8px; align-items:center;"><input type="color" id="setBgColor" style="width:48px; height:38px; padding:2px; border-radius:8px; border:1px solid var(--border); background:var(--surface);" onchange="setBgColor(this.value)"><button type="button" class="btn ghost" style="width:auto; padding:8px 12px;" onclick="setBgColor('')">Сбросить</button></span></div>
+    <div class="set-title">Фон приложения</div>
+    <div id="bgSwatches" style="display:flex; flex-wrap:wrap; gap:10px; align-items:center;"></div>
+    <div class="set-row" style="border-bottom:none;"><span>Свой цвет</span>
+      <span style="display:flex; gap:8px; align-items:center;"><input type="color" id="setBgColor" style="width:48px; height:38px; padding:2px; border-radius:8px; border:1px solid var(--border); background:var(--surface);" onchange="setBgColor(this.value)"><button type="button" class="btn ghost" style="width:auto; padding:8px 12px;" onclick="setBgColor('')">Сбросить</button></span></div>
+    <div class="set-row"><span>Начальный экран</span>
+      <select id="setStart" onchange="setSetting('startScreen', this.value)">
+        <option value="home">Главная</option><option value="ops">Операции</option><option value="accounts">Счета</option>
+      </select></div>
+    <div class="set-row"><span>Скрывать суммы<br><span style="font-size:12px; color:var(--ink-faint);">также кнопка с глазом вверху справа</span></span>
+      <input type="checkbox" id="setHide" style="width:22px;height:22px;" onchange="setSetting('hideAmounts', this.checked)"></div>
+    <div class="set-title">Работа приложения</div>
+    <div class="set-title">Напоминания</div>
+    <div class="set-row"><span>Об окончании депозита, дней до конца</span><input type="number" id="setDepDays" inputmode="numeric" min="1" max="90" onchange="setReminder('depositDays', this.value, 1, 90)"></div>
+    <div class="set-row"><span>Если не вносились операции, дней</span><input type="number" id="setOpsDays" inputmode="numeric" min="3" max="90" onchange="setReminder('staleOpsDays', this.value, 3, 90)"></div>
+    <div class="set-row"><span>Об обновлении копии, дней</span><input type="number" id="setBackupDays" inputmode="numeric" min="7" max="365" onchange="setReminder('backupDays', this.value, 7, 365)"></div>
+    <div class="set-title">Главная: порядок и видимость карточек</div>
+    <div id="homeLayoutList"></div>
+    <button type="button" class="btn ghost" style="margin-top:10px;" onclick="resetHomeLayout()">Сбросить порядок</button>
+  </div>
+
+  <div class="card" data-svc="lock">
+    <h2>Защита паролем</h2>
+    <div class="toggle-row">
+      <span>Запрашивать пароль при входе</span>
+      <label class="switch">
+        <input type="checkbox" id="lockToggle" onchange="onLockToggleChanged(this.checked)">
+        <span class="slider"></span>
+      </label>
+    </div>
+    <div id="lockManageRow" class="btn-row" style="margin-top:12px;" hidden>
+      <button class="btn ghost" onclick="startChangePassword()">Изменить пароль</button>
+    </div>
+    <p style="font-size:calc(12px * var(--fs,1)); color:var(--ink-faint); margin-top:12px;">
+      Это простой экран входа — защита от случайного взгляда, а не настоящее шифрование.
+      Забыли пароль — восстановить его нельзя, только очистить данные сайта в Chrome
+      (это сотрёт всё; поэтому держите свежую резервную копию).
+    </p>
+  </div>
+
   <div class="card" data-svc="sync">
     <h2>Синхронизация через GitHub</h2>
     <p style="font-size:calc(13px * var(--fs,1)); color:var(--ink-soft); margin:0 0 10px;">Связывает телефон и ПК через ваш приватный репозиторий. Отправка только по кнопке ⟳ вверху экрана.</p>
@@ -970,25 +996,6 @@
     <p style="font-size:calc(13px * var(--fs,1)); color:var(--ink-soft); margin:0 0 12px;">Список всех счетов в виде таблицы — можно открыть в Excel или Google Таблицах. Это не резервная копия для восстановления, а просто просмотровый файл.</p>
     <button class="btn ghost" onclick="exportCSV()">Экспорт счетов в CSV</button>
     <button class="btn ghost" style="margin-top:8px;" onclick="exportOpsCSV()">Экспорт операций в CSV</button>
-  </div>
-
-  <div class="card" data-svc="lock">
-    <h2>Защита паролем</h2>
-    <div class="toggle-row">
-      <span>Запрашивать пароль при входе</span>
-      <label class="switch">
-        <input type="checkbox" id="lockToggle" onchange="onLockToggleChanged(this.checked)">
-        <span class="slider"></span>
-      </label>
-    </div>
-    <div id="lockManageRow" class="btn-row" style="margin-top:12px;" hidden>
-      <button class="btn ghost" onclick="startChangePassword()">Изменить пароль</button>
-    </div>
-    <p style="font-size:calc(12px * var(--fs,1)); color:var(--ink-faint); margin-top:12px;">
-      Это простой экран входа — защита от случайного взгляда, а не настоящее шифрование.
-      Забыли пароль — восстановить его нельзя, только очистить данные сайта в Chrome
-      (это сотрёт всё; поэтому держите свежую резервную копию).
-    </p>
   </div>
 
   <div class="card">
@@ -1447,20 +1454,21 @@ async function saveData(){
 }
 
 function showScreen(name){
-  ["home","accounts","ops","rates"].forEach(function(s){
+  ["home","accounts","ops","rates","settings"].forEach(function(s){
     document.getElementById("screen-" + s).hidden = (s !== name);
   });
   document.querySelectorAll(".navbar button").forEach(function(b){
     b.classList.toggle("active", b.dataset.screen === name);
   });
-  var titles = { home: ["Личные накопления", ""], accounts: ["Счета", "Все ваши карты, депозиты и наличные"], ops: ["Операции", "Доходы и расходы"], rates: ["Сервис", "Курсы, банки, категории, копия данных"] };
+  var titles = { home: ["Личные накопления", ""], accounts: ["Счета", "Все ваши карты, депозиты и наличные"], ops: ["Операции", "Доходы и расходы"], rates: ["Сервис", "Курсы, калькуляторы, банки, категории"], settings: ["Настройки", "Оформление, защита, копия, синхронизация"] };
   document.getElementById("topbarTitle").textContent = titles[name][0];
   document.getElementById("topbarSub").textContent = titles[name][1];
-  document.getElementById("fabAdd").hidden = (name === "rates" || name === "ops");
+  document.getElementById("fabAdd").hidden = (name === "rates" || name === "ops" || name === "settings");
+  var gb = document.getElementById("gearBtn"); if(gb) gb.classList.toggle("on", name === "settings");
   if(name === "home") renderHome();
   if(name === "accounts") renderAccounts();
   if(name === "ops") renderOps();
-  if(name === "rates"){ renderRates(); renderBanks(); renderCatEditor(); }
+  if(name === "rates" || name === "settings"){ renderRates(); renderBanks(); renderCatEditor(); try{ renderAbout(); renderSyncUI(); }catch(e){} }
   updateToTop();
 }
 
@@ -3489,7 +3497,7 @@ function saveHistEdit(ev){
 
 /* ===== Сворачиваемые карточки «Сервиса» ===== */
 function initServiceCards(){
-  document.querySelectorAll("#screen-rates .card[data-svc]").forEach(function(card){
+  document.querySelectorAll("#screen-rates .card[data-svc], #screen-settings .card[data-svc]").forEach(function(card){
     var key = card.dataset.svc;
     var h2 = card.querySelector("h2");
     if(!h2 || card.dataset.svcInit) return;
@@ -3512,7 +3520,7 @@ function initServiceCards(){
   applySvc();
 }
 function applySvc(){
-  document.querySelectorAll("#screen-rates .card[data-svc]").forEach(function(card){
+  document.querySelectorAll("#screen-rates .card[data-svc], #screen-settings .card[data-svc]").forEach(function(card){
     var key = card.dataset.svc, body = document.getElementById("svcBody-" + key), chev = document.getElementById("svcChev-" + key);
     if(!body || !chev) return;
     var open = !!uiPrefs.svcOpen[key];
@@ -4184,7 +4192,7 @@ async function checkForUpdate(){
   btn.disabled = false;
 }
 
-var APP_VERSION = "2026-11-02.1";
+var APP_VERSION = "2026-11-02.2";
 var BACKUP_KEY = "savings-app-last-backup";
 var EXPORT_TS_KEY = "savings-app-last-export-ts";
 var IMPORT_TS_KEY = "savings-app-last-import-ts";
@@ -4781,8 +4789,8 @@ function syncRerender(){
 async function syncNow(){
   var cfg = syncCfg();
   if(!cfg){
-    toast("Сначала подключите GitHub: Сервис → Синхронизация");
-    showScreen("rates");
+    toast("Сначала подключите GitHub: ⚙ → Синхронизация");
+    showScreen("settings");
     if(!uiPrefs.svcOpen.sync){ uiPrefs.svcOpen.sync = true; saveUiPrefs(); applySvc(); }
     return;
   }
