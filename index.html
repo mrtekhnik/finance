@@ -1174,6 +1174,10 @@
         <input type="number" id="adjAmount" step="0.01" inputmode="decimal" required placeholder="0" oninput="renderAdjust()">
       </div>
       <div class="hint-line" id="adjResult"></div>
+      <div id="adjOpBox" hidden>
+        <label style="display:flex; align-items:center; gap:10px; margin:0; color:var(--ink);"><input type="checkbox" id="adjOp" style="width:22px;height:22px;" onchange="onAdjOp()"> <span id="adjOpText">Записать как доход в Операции</span></label>
+        <div id="adjOpCatWrap" hidden style="margin-top:8px;"><label>Категория</label><select id="adjOpCat"></select></div>
+      </div>
       <div class="btn-row sheet-footer">
         <button type="button" class="btn ghost" onclick="closeAdjSheet()">Отмена</button>
         <button type="submit" class="btn primary">Записать</button>
@@ -2836,8 +2840,8 @@ function deleteAccount(id){
 
 /* ===== Секции, журнал счетов, переводы ===== */
 var UI_KEY = "savings-app-ui";
-var uiPrefs = { history: false, risks: false, month: true, deps: false, rec: false, cats: false, opcat: false, depsCollapsed: {}, svcOpen: {} };
-try{ var _u = JSON.parse(localStorage.getItem(UI_KEY) || "null"); if(_u && typeof _u === "object"){ uiPrefs.history = !!_u.history; uiPrefs.risks = !!_u.risks; uiPrefs.deps = !!_u.deps; uiPrefs.rec = !!_u.rec; uiPrefs.cats = !!_u.cats; uiPrefs.opcat = !!_u.opcat; if(typeof _u.month === "boolean") uiPrefs.month = _u.month; if(_u.depsCollapsed && typeof _u.depsCollapsed === "object") uiPrefs.depsCollapsed = _u.depsCollapsed; if(_u.svcOpen && typeof _u.svcOpen === "object") uiPrefs.svcOpen = _u.svcOpen; } }catch(e){}
+var uiPrefs = { history: false, risks: false, month: true, deps: false, rec: false, cats: false, opcat: false, depsCollapsed: {}, svcOpen: {}, adjOp: false };
+try{ var _u = JSON.parse(localStorage.getItem(UI_KEY) || "null"); if(_u && typeof _u === "object"){ uiPrefs.history = !!_u.history; uiPrefs.risks = !!_u.risks; uiPrefs.deps = !!_u.deps; uiPrefs.rec = !!_u.rec; uiPrefs.cats = !!_u.cats; uiPrefs.opcat = !!_u.opcat; uiPrefs.adjOp = !!_u.adjOp; if(typeof _u.month === "boolean") uiPrefs.month = _u.month; if(_u.depsCollapsed && typeof _u.depsCollapsed === "object") uiPrefs.depsCollapsed = _u.depsCollapsed; if(_u.svcOpen && typeof _u.svcOpen === "object") uiPrefs.svcOpen = _u.svcOpen; } }catch(e){}
 
 function pluralRu(n, forms){
   var a = Math.abs(n) % 100, b = a % 10;
@@ -3031,6 +3035,7 @@ function openAdjust(id){
   adjAccId = id; adjSign = 1;
   document.getElementById("adjTitle").textContent = accLabel(a);
   document.getElementById("adjAmount").value = "";
+  document.getElementById("adjOp").checked = !!uiPrefs.adjOp;
   setAdjMode(1);
   document.getElementById("adjOverlay").hidden = false;
   setTimeout(function(){ document.getElementById("adjAmount").focus(); }, 60);
@@ -3041,7 +3046,25 @@ function setAdjMode(sign){
   document.getElementById("adjModeIn").classList.toggle("active", sign > 0);
   document.getElementById("adjModeOut").classList.toggle("active", sign < 0);
   document.getElementById("adjLabel").textContent = sign > 0 ? "Сумма пополнения" : "Сумма списания";
+  var a = DATA.accounts.find(function(x){ return x.id === adjAccId; });
+  var box = document.getElementById("adjOpBox");
+  box.hidden = !(a && a.currency === "UAH");   /* операции ведутся в гривнах */
+  document.getElementById("adjOpText").textContent = sign > 0 ? "Записать как доход в Операции" : "Записать как расход в Операции";
+  fillAdjCats();
   renderAdjust();
+}
+function adjOpType(){ return adjSign > 0 ? "inc" : "exp"; }
+function fillAdjCats(){
+  var t = adjOpType(), sel = document.getElementById("adjOpCat");
+  var cats = (DATA.opCats && DATA.opCats[t]) || [];
+  sel.innerHTML = cats.map(function(c){ return '<option>' + esc(c) + '</option>'; }).join("");
+  var last = (typeof lastOpCat === "object" && lastOpCat && lastOpCat[t]) || "";
+  if(last && cats.indexOf(last) !== -1) sel.value = last;
+  document.getElementById("adjOpCatWrap").hidden = !document.getElementById("adjOp").checked || document.getElementById("adjOpBox").hidden;
+}
+function onAdjOp(){
+  uiPrefs.adjOp = document.getElementById("adjOp").checked; saveUiPrefs();
+  fillAdjCats();
 }
 function renderAdjust(){
   var a = DATA.accounts.find(function(x){ return x.id === adjAccId; }); if(!a) return;
@@ -3062,13 +3085,23 @@ function submitAdjust(ev){
   var old = JSON.parse(JSON.stringify(a));
   a.amount = next;
   var logId = addLogEntry({ type: "edit", accId: a.id, label: accLabel(a), changes: diffAccount(old, a) });
-  saveData(); closeAdjSheet(); renderAccounts(); renderHome();
+  var opId = null;
+  if(a.currency === "UAH" && document.getElementById("adjOp").checked){
+    var cat = document.getElementById("adjOpCat").value;
+    if(cat){
+      opId = uid();
+      DATA.ops.push({ id: opId, type: adjOpType(), amount: v, cat: cat, date: todayLocalISO(), comment: (adjSign > 0 ? "Пополнение: " : "Списание: ") + accLabel(a) });
+      if(typeof lastOpCat === "object" && lastOpCat) lastOpCat[adjOpType()] = cat;
+    }
+  }
+  saveData(); closeAdjSheet(); renderAccounts(); renderHome(); renderOps();
   var id = a.id;
   toastWithUndo((adjSign > 0 ? "Пополнено: +" : "Списано: −") + fmt(v) + " " + currencySymbol(a.currency), function(){
     var t = DATA.accounts.find(function(x){ return x.id === id; });
     if(t) t.amount = old.amount;
     removeLogEntry(logId);
-    saveData(); renderAccounts(); renderHome();
+    if(opId) DATA.ops = DATA.ops.filter(function(o){ return o.id !== opId; });
+    saveData(); renderAccounts(); renderHome(); renderOps();
   });
   return false;
 }
@@ -4264,7 +4297,7 @@ async function checkForUpdate(){
   btn.disabled = false;
 }
 
-var APP_VERSION = "2026-11-06.2";
+var APP_VERSION = "2026-11-06.3";
 var BACKUP_KEY = "savings-app-last-backup";
 var EXPORT_TS_KEY = "savings-app-last-export-ts";
 var IMPORT_TS_KEY = "savings-app-last-import-ts";
