@@ -449,6 +449,7 @@
   .gear-btn{position:absolute; right:12px; top:14px; width:38px; height:38px; border-radius:50%; border:none; background:rgba(255,255,255,.16); color:#fff; display:flex; align-items:center; justify-content:center;}
   .gear-btn svg{width:21px; height:21px;}
   .gear-btn.on{background:rgba(255,255,255,.34);}
+  .adj-mode.active{background:var(--primary); color:#fff; border-color:var(--primary);}
   .sync-btn{position:absolute; right:100px; top:14px; width:38px; height:38px; border-radius:50%; border:none; background:rgba(255,255,255,.16); color:#fff; display:flex; align-items:center; justify-content:center; font-size:22px; line-height:1;}
   .sync-btn.spin span{display:inline-block; animation:syncspin 1s linear infinite;}
   .sync-btn.has-dirty::after{content:""; position:absolute; top:4px; right:4px; width:11px; height:11px; border-radius:50%; background:#ffd400; border:2px solid #fff;}
@@ -1154,6 +1155,28 @@
       <div class="btn-row sheet-footer">
         <button type="button" class="btn ghost" onclick="closeGoalSheet()">Отмена</button>
         <button type="submit" class="btn primary" id="goalSubmitBtn">Добавить</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<div class="overlay" id="adjOverlay" hidden>
+  <div class="sheet-panel">
+    <h3 id="adjTitle">Пополнить / списать</h3>
+    <form class="sheet" onsubmit="return submitAdjust(event)">
+      <div class="hint-line" id="adjCurrent"></div>
+      <div class="btn-row">
+        <button type="button" class="btn ghost adj-mode" id="adjModeIn" onclick="setAdjMode(1)">＋ Пополнить</button>
+        <button type="button" class="btn ghost adj-mode" id="adjModeOut" onclick="setAdjMode(-1)">− Списать</button>
+      </div>
+      <div>
+        <label id="adjLabel">Сумма пополнения</label>
+        <input type="number" id="adjAmount" step="0.01" inputmode="decimal" required placeholder="0" oninput="renderAdjust()">
+      </div>
+      <div class="hint-line" id="adjResult"></div>
+      <div class="btn-row sheet-footer">
+        <button type="button" class="btn ghost" onclick="closeAdjSheet()">Отмена</button>
+        <button type="submit" class="btn primary">Записать</button>
       </div>
     </form>
   </div>
@@ -2326,6 +2349,7 @@ function renderAccounts(){
       (metaText ? '<div class="meta">'+esc(metaText)+'</div>' : '') +
       '</div>' +
       '<div class="right"><div class="amount">'+fmt(a.amount)+' '+currencySymbol(a.currency)+'</div>' +
+      (a.type !== "Депозит" ? '<button class="icon-btn" aria-label="Пополнить или списать" title="Пополнить / списать" onclick="openAdjust(\''+a.id+'\')">±</button>' : '') +
       '<button class="icon-btn" aria-label="Изменить" onclick="editAccount(\''+a.id+'\')">✎</button>' +
       '<button class="icon-btn" aria-label="Удалить" onclick="deleteAccount(\''+a.id+'\')">✕</button></div>';
     list.appendChild(div);
@@ -2999,6 +3023,53 @@ function transferFillAccs(side, selectedId){
 function onTransferBank(side){
   transferFillAccs(side);
   onTransferChange(side);
+}
+var adjAccId = null, adjSign = 1;
+function openAdjust(id){
+  var a = DATA.accounts.find(function(x){ return x.id === id; }); if(!a) return;
+  adjAccId = id; adjSign = 1;
+  document.getElementById("adjTitle").textContent = accLabel(a);
+  document.getElementById("adjAmount").value = "";
+  setAdjMode(1);
+  document.getElementById("adjOverlay").hidden = false;
+  setTimeout(function(){ document.getElementById("adjAmount").focus(); }, 60);
+}
+function closeAdjSheet(){ document.getElementById("adjOverlay").hidden = true; adjAccId = null; }
+function setAdjMode(sign){
+  adjSign = sign;
+  document.getElementById("adjModeIn").classList.toggle("active", sign > 0);
+  document.getElementById("adjModeOut").classList.toggle("active", sign < 0);
+  document.getElementById("adjLabel").textContent = sign > 0 ? "Сумма пополнения" : "Сумма списания";
+  renderAdjust();
+}
+function renderAdjust(){
+  var a = DATA.accounts.find(function(x){ return x.id === adjAccId; }); if(!a) return;
+  var cs = currencySymbol(a.currency), v = parseFloat(document.getElementById("adjAmount").value);
+  document.getElementById("adjCurrent").textContent = "Сейчас: " + fmt(a.amount) + " " + cs;
+  var res = document.getElementById("adjResult");
+  if(isNaN(v) || v <= 0){ res.textContent = ""; return; }
+  var next = round2(Number(a.amount) + adjSign * v);
+  res.textContent = "Станет: " + fmt(a.amount) + " " + (adjSign > 0 ? "+" : "−") + " " + fmt(v) + " = " + fmt(next) + " " + cs;
+}
+function submitAdjust(ev){
+  ev.preventDefault();
+  var a = DATA.accounts.find(function(x){ return x.id === adjAccId; }); if(!a) return false;
+  var v = parseFloat(document.getElementById("adjAmount").value);
+  if(isNaN(v) || v <= 0){ toast("Укажите сумму"); return false; }
+  var next = round2(Number(a.amount) + adjSign * v);
+  if(next < 0){ toast("Сумма списания больше остатка"); return false; }
+  var old = JSON.parse(JSON.stringify(a));
+  a.amount = next;
+  var logId = addLogEntry({ type: "edit", accId: a.id, label: accLabel(a), changes: diffAccount(old, a) });
+  saveData(); closeAdjSheet(); renderAccounts(); renderHome();
+  var id = a.id;
+  toastWithUndo((adjSign > 0 ? "Пополнено: +" : "Списано: −") + fmt(v) + " " + currencySymbol(a.currency), function(){
+    var t = DATA.accounts.find(function(x){ return x.id === id; });
+    if(t) t.amount = old.amount;
+    removeLogEntry(logId);
+    saveData(); renderAccounts(); renderHome();
+  });
+  return false;
 }
 function closeTransferSheet(){ document.getElementById("transferOverlay").hidden = true; }
 
@@ -4192,7 +4263,7 @@ async function checkForUpdate(){
   btn.disabled = false;
 }
 
-var APP_VERSION = "2026-11-05.1";
+var APP_VERSION = "2026-11-06.1";
 var BACKUP_KEY = "savings-app-last-backup";
 var EXPORT_TS_KEY = "savings-app-last-export-ts";
 var IMPORT_TS_KEY = "savings-app-last-import-ts";
@@ -4976,7 +5047,7 @@ function syncFileToBackup(parsed){
 
 
 /* ===== Закрытие окон кликом мимо ===== */
-var OVERLAY_CLOSERS = { addOverlay: "closeAddSheet", goalOverlay: "closeGoalSheet", transferOverlay: "closeTransferSheet", logOverlay: "closeLogSheet",
+var OVERLAY_CLOSERS = { addOverlay: "closeAddSheet", goalOverlay: "closeGoalSheet", transferOverlay: "closeTransferSheet", adjOverlay: "closeAdjSheet", logOverlay: "closeLogSheet",
   historyOverlay: "closeHistorySheet", logEditOverlay: "closeLogEdit", histEditOverlay: "closeHistEdit", recOverlay: "closeRecSheet",
   msgOverlay: "closeMsg", conflictOverlay: "closeConflicts" };
 var overlayDownTarget = null;
