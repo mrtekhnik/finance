@@ -1615,6 +1615,7 @@ function renderHome(){
       var meta = a.type + (a.name ? " · " + a.name : "");
       return '<div class="bank-acc-row"><span class="bank-acc-meta">' + esc(meta) + '</span>' +
         '<span class="bank-acc-right"><span class="bank-acc-amt">' + fmt(a.amount) + ' ' + currencySymbol(a.currency) + '</span>' +
+        (a.type !== "Депозит" ? '<button type="button" class="icon-btn" aria-label="Пополнить или списать" title="Пополнить / списать" onclick="openAdjust(\'' + a.id + '\')">±</button>' : '') +
         '<button type="button" class="icon-btn" aria-label="Изменить счёт" onclick="editAccount(\'' + a.id + '\')">✎</button></span></div>';
     }).join("");
     var row = document.createElement("div");
@@ -4263,7 +4264,7 @@ async function checkForUpdate(){
   btn.disabled = false;
 }
 
-var APP_VERSION = "2026-11-06.1";
+var APP_VERSION = "2026-11-06.2";
 var BACKUP_KEY = "savings-app-last-backup";
 var EXPORT_TS_KEY = "savings-app-last-export-ts";
 var IMPORT_TS_KEY = "savings-app-last-import-ts";
