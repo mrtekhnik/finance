@@ -457,6 +457,13 @@
   .gear-btn svg{width:21px; height:21px;}
   .gear-btn.on{background:rgba(255,255,255,.34);}
   .adj-mode.active{background:var(--primary); color:#fff; border-color:var(--primary);}
+  .cb-bank{margin-bottom:12px;}
+  .cb-bname{font-weight:700; margin-bottom:4px; display:flex; align-items:center; gap:8px;}
+  .cb-row{display:flex; align-items:center; gap:6px; padding:6px 0; border-top:1px solid var(--hair);}
+  .cb-main{flex:1 1 auto; min-width:0; display:flex; flex-direction:column;}
+  .cb-name{word-break:break-word;}
+  .cb-note{font-size:calc(12px * var(--fs,1)); color:var(--ink-faint);}
+  .cb-pct{font-weight:700; color:var(--pos-ink); flex:0 0 auto; padding:0 4px;}
   .sync-btn{position:absolute; right:100px; top:14px; width:38px; height:38px; border-radius:50%; border:none; background:rgba(255,255,255,.16); color:#fff; display:flex; align-items:center; justify-content:center; font-size:22px; line-height:1;}
   .sync-btn.spin span{display:inline-block; animation:syncspin 1s linear infinite;}
   .sync-btn.has-dirty::after{content:""; position:absolute; top:4px; right:4px; width:11px; height:11px; border-radius:50%; background:#ffd400; border:2px solid #fff;}
@@ -890,6 +897,14 @@
     </div>
   </div>
 
+  <div class="card" data-svc="cashback">
+    <h2>Кешбек по банкам</h2>
+    <p style="font-size:calc(12px * var(--fs,1)); color:var(--ink-faint); margin:0 0 10px;">Справочник: где какой кешбек. Проценты банки меняют по месяцам — правьте в одно касание.</p>
+    <div id="cashbackList"></div>
+    <div class="section-gap"></div>
+    <button type="button" class="btn primary" onclick="openCashback()">+ Добавить позицию</button>
+  </div>
+
   <div class="card" data-svc="cats">
     <h2>Категории операций</h2>
     <p style="font-size:calc(12px * var(--fs,1)); color:var(--ink-faint); margin:0 0 10px;">Нажмите ✕, чтобы убрать категорию. Старые операции сохранят своё название.</p>
@@ -1169,6 +1184,22 @@
   </div>
 </div>
 
+<div class="overlay" id="cbOverlay" hidden>
+  <div class="sheet-panel">
+    <h3 id="cbTitle">Позиция кешбека</h3>
+    <form class="sheet" onsubmit="return submitCashback(event)">
+      <div><label>Банк</label><select id="cbBank"></select></div>
+      <div><label>За что (категория)</label><input type="text" id="cbName" placeholder="Напр. Продукты, АЗС, Аптеки" required maxlength="60"></div>
+      <div><label>Процент, %</label><input type="number" id="cbPct" step="0.1" min="0" max="100" inputmode="decimal" placeholder="0" required></div>
+      <div><label>Примечание (необязательно)</label><input type="text" id="cbNote" placeholder="Напр. лимит 3000 грн, до 30.11" maxlength="80"></div>
+      <div class="btn-row sheet-footer">
+        <button type="button" class="btn ghost" onclick="closeCashback()">Отмена</button>
+        <button type="submit" class="btn primary">Сохранить</button>
+      </div>
+    </form>
+  </div>
+</div>
+
 <div class="overlay" id="adjOverlay" hidden>
   <div class="sheet-panel">
     <h3 id="adjTitle">Пополнить / списать</h3>
@@ -1365,7 +1396,7 @@
 </div>
 
 <script>
-var DATA = { accounts: [], banks: ["Monobank","ПУМБ","Райффайзен","ПриватБанк","Sense Bank","Наличные"], rates: { USD: { buy: 41.0, sell: 41.8 }, EUR: { buy: 44.0, sell: 45.2 } }, sortMode: "bank", appLock: { enabled: false, hash: null }, depositTaxRate: 23, goals: [], history: [], log: [], recurring: [], settings: null, ops: [], opCats: { exp: [], inc: [] }, riskSettings: { currencyThreshold: 50, bankThreshold: 35, minLiquidity: 60, guaranteeLimit: 600000, bankCurrencyThreshold: 30, reinvestThreshold: 20 } };
+var DATA = { accounts: [], banks: ["Monobank","ПУМБ","Райффайзен","ПриватБанк","Sense Bank","Наличные"], rates: { USD: { buy: 41.0, sell: 41.8 }, EUR: { buy: 44.0, sell: 45.2 } }, sortMode: "bank", appLock: { enabled: false, hash: null }, depositTaxRate: 23, goals: [], cashback: [], history: [], log: [], recurring: [], settings: null, ops: [], opCats: { exp: [], inc: [] }, riskSettings: { currencyThreshold: 50, bankThreshold: 35, minLiquidity: 60, guaranteeLimit: 600000, bankCurrencyThreshold: 30, reinvestThreshold: 20 } };
 var STORAGE_KEY = "savings-app-data";
 var editingId = null;
 var CUR_COLORS = { UAH: "#3E4E6B", USD: "#E8C468", EUR: "#6FAE8D" };
@@ -1464,6 +1495,7 @@ async function loadData(){
       DATA.appLock = parsed.appLock || DATA.appLock;
       DATA.depositTaxRate = (typeof parsed.depositTaxRate === "number") ? parsed.depositTaxRate : DATA.depositTaxRate;
       DATA.goals = Array.isArray(parsed.goals) ? parsed.goals : DATA.goals;
+      DATA.cashback = normalizeCashback(parsed.cashback);
       DATA.history = Array.isArray(parsed.history) ? parsed.history : DATA.history;
       DATA.log = Array.isArray(parsed.log) ? parsed.log : [];
       DATA.ops = Array.isArray(parsed.ops) ? parsed.ops : [];
@@ -1496,7 +1528,7 @@ function showScreen(name){
   document.querySelectorAll(".navbar button").forEach(function(b){
     b.classList.toggle("active", b.dataset.screen === name);
   });
-  var titles = { home: ["Личные накопления", ""], accounts: ["Счета", "Все ваши карты, депозиты и наличные"], ops: ["Операции", "Доходы и расходы"], rates: ["Сервис", "Курсы, калькуляторы, банки, категории"], settings: ["Настройки", "Оформление, защита, копия, синхронизация"] };
+  var titles = { home: ["Личные накопления", ""], accounts: ["Счета", "Все ваши карты, депозиты и наличные"], ops: ["Операции", "Доходы и расходы"], rates: ["Сервис", "Курсы, калькуляторы, банки, кешбек, категории"], settings: ["Настройки", "Оформление, защита, копия, синхронизация"] };
   document.getElementById("topbarTitle").textContent = titles[name][0];
   document.getElementById("topbarSub").textContent = titles[name][1];
   document.getElementById("fabAdd").hidden = (name === "rates" || name === "ops" || name === "settings");
@@ -2389,6 +2421,66 @@ function renderBanks(){
       '</div>';
     wrap.appendChild(row);
   });
+  renderCashback();
+}
+
+/* ===== Кешбек по банкам (справочник) ===== */
+var editingCbId = null;
+function normalizeCashback(arr){
+  if(!Array.isArray(arr)) return [];
+  return arr.filter(function(x){ return x && typeof x.id === "string" && typeof x.bank === "string" && typeof x.name === "string" && typeof x.pct === "number"; })
+    .map(function(x){ return { id: x.id, bank: x.bank, name: x.name, pct: x.pct, note: typeof x.note === "string" ? x.note : "" }; });
+}
+function renderCashback(){
+  var wrap = document.getElementById("cashbackList"); if(!wrap) return;
+  var banks = DATA.banks.slice();
+  DATA.cashback.forEach(function(c){ if(banks.indexOf(c.bank) === -1) banks.push(c.bank); });
+  var html = banks.map(function(b){
+    var items = DATA.cashback.filter(function(c){ return c.bank === b; }).sort(function(x, y){ return y.pct - x.pct; });
+    if(!items.length) return "";
+    return '<div class="cb-bank"><div class="cb-bname"><span class="bank-dot" style="background:' + bankColor(b) + '"></span>' + esc(b) + '</div>' +
+      items.map(function(c){
+        return '<div class="cb-row"><div class="cb-main"><span class="cb-name">' + esc(c.name) + '</span>' + (c.note ? '<span class="cb-note">' + esc(c.note) + '</span>' : '') + '</div>' +
+          '<span class="cb-pct">' + String(c.pct).replace(".", ",") + '%</span>' +
+          '<button type="button" class="icon-btn" aria-label="Изменить" onclick="openCashback(\'' + c.id + '\')">✎</button>' +
+          '<button type="button" class="icon-btn" aria-label="Удалить" onclick="deleteCashback(\'' + c.id + '\')">✕</button></div>';
+      }).join("") + '</div>';
+  }).join("");
+  wrap.innerHTML = html || '<div style="font-size:calc(13px * var(--fs,1)); color:var(--ink-faint);">Пока пусто — нажмите «+ Добавить позицию».</div>';
+}
+function openCashback(id){
+  var c = id ? DATA.cashback.find(function(x){ return x.id === id; }) : null;
+  editingCbId = c ? c.id : null;
+  document.getElementById("cbTitle").textContent = c ? "Изменить позицию" : "Новая позиция кешбека";
+  var sel = document.getElementById("cbBank");
+  var banks = DATA.banks.slice(); if(c && banks.indexOf(c.bank) === -1) banks.push(c.bank);
+  sel.innerHTML = banks.map(function(b){ return '<option>' + esc(b) + '</option>'; }).join("");
+  if(c) sel.value = c.bank; else if(cbLastBank && banks.indexOf(cbLastBank) !== -1) sel.value = cbLastBank;
+  document.getElementById("cbName").value = c ? c.name : "";
+  document.getElementById("cbPct").value = c ? c.pct : "";
+  document.getElementById("cbNote").value = c ? c.note : "";
+  document.getElementById("cbOverlay").hidden = false;
+}
+var cbLastBank = "";
+function closeCashback(){ document.getElementById("cbOverlay").hidden = true; editingCbId = null; }
+function submitCashback(ev){
+  ev.preventDefault();
+  var bank = document.getElementById("cbBank").value, name = document.getElementById("cbName").value.trim();
+  var pct = parseFloat(document.getElementById("cbPct").value), note = document.getElementById("cbNote").value.trim();
+  if(!bank || !name || isNaN(pct) || pct < 0 || pct > 100){ toast("Проверьте банк, название и процент"); return false; }
+  cbLastBank = bank;
+  var c = editingCbId ? DATA.cashback.find(function(x){ return x.id === editingCbId; }) : null;
+  if(c){ c.bank = bank; c.name = name; c.pct = pct; c.note = note; }
+  else DATA.cashback.push({ id: uid(), bank: bank, name: name, pct: pct, note: note });
+  saveData(); closeCashback(); renderCashback();
+  toast("Сохранено");
+  return false;
+}
+function deleteCashback(id){
+  var c = DATA.cashback.find(function(x){ return x.id === id; }); if(!c) return;
+  if(!confirm("Удалить позицию «" + c.name + " — " + c.pct + "%» (" + c.bank + ")?")) return;
+  DATA.cashback = DATA.cashback.filter(function(x){ return x.id !== id; });
+  saveData(); renderCashback();
 }
 
 function moveBank(idx, dir){
@@ -4320,7 +4412,7 @@ async function checkForUpdate(){
   btn.disabled = false;
 }
 
-var APP_VERSION = "2026-11-07.1";
+var APP_VERSION = "2026-11-07.2";
 var BACKUP_KEY = "savings-app-last-backup";
 var EXPORT_TS_KEY = "savings-app-last-export-ts";
 var IMPORT_TS_KEY = "savings-app-last-import-ts";
@@ -4465,6 +4557,7 @@ function replaceDataFrom(parsed){
   DATA.appLock = parsed.appLock || DATA.appLock;
   DATA.depositTaxRate = (typeof parsed.depositTaxRate === "number") ? parsed.depositTaxRate : DATA.depositTaxRate;
   DATA.goals = Array.isArray(parsed.goals) ? parsed.goals : [];
+  DATA.cashback = normalizeCashback(parsed.cashback);
   DATA.history = Array.isArray(parsed.history) ? parsed.history : [];
   DATA.log = Array.isArray(parsed.log) ? parsed.log : [];
   DATA.ops = Array.isArray(parsed.ops) ? parsed.ops : [];
@@ -4618,7 +4711,7 @@ function fpOf(d){ return hashStr(stableStr(d)); }
 function deepCopy(x){ return JSON.parse(JSON.stringify(x)); }
 function kindOf(key){ return key.split(":")[0]; }
 var SYNC_CHOICE = { acc: 1, op: 1, rec: 1 };      /* при расхождении — окно выбора */
-var SYNC_VISIBLE = { acc: 1, op: 1, rec: 1, goal: 1, hist: 1, bank: 1, cat: 1 };
+var SYNC_VISIBLE = { acc: 1, op: 1, rec: 1, goal: 1, hist: 1, bank: 1, cat: 1, cb: 1 };
 
 function syncCollect(noM){
   var items = {};
@@ -4627,6 +4720,7 @@ function syncCollect(noM){
   DATA.ops.forEach(function(o){ add("op:" + o.id, o); });
   DATA.recurring.forEach(function(r){ add("rec:" + r.id, r); });
   DATA.goals.forEach(function(g){ add("goal:" + g.id, g); });
+  DATA.cashback.forEach(function(c){ add("cb:" + c.id, c); });
   DATA.history.forEach(function(h){ add("hist:" + h.month, h); });
   DATA.log.forEach(function(e){ if(e.id) add("log:" + e.id, e); });
   DATA.banks.forEach(function(b){ add("bank:" + b, { name: b }); });
@@ -4689,7 +4783,8 @@ function syncParseRemote(R){
   Object.keys(R.items).forEach(function(k){
     var it = R.items[k], kind = kindOf(k), d = it && it.d;
     if(!it || typeof it.m !== "number" || !d || typeof d !== "object") throw syncCorrupt();
-    if((kind === "acc" || kind === "op" || kind === "rec" || kind === "goal" || kind === "log") && typeof d.id !== "string") throw syncCorrupt();
+    if((kind === "acc" || kind === "op" || kind === "rec" || kind === "goal" || kind === "log" || kind === "cb") && typeof d.id !== "string") throw syncCorrupt();
+    if(kind === "cb" && (typeof d.name !== "string" || typeof d.pct !== "number" || typeof d.bank !== "string")) throw syncCorrupt();
     if(kind === "acc" && (typeof d.amount !== "number" || typeof d.bank !== "string")) throw syncCorrupt();
     if(kind === "op" && (typeof d.amount !== "number" || typeof d.date !== "string")) throw syncCorrupt();
     if(kind === "hist" && (typeof d.month !== "string" || typeof d.totalUAH !== "number")) throw syncCorrupt();
@@ -4778,6 +4873,7 @@ function syncBuildData(F, cur){
   data.ops = ordered(cur.ops, "op:", function(x){ return x.id; });
   data.recurring = ordered(cur.recurring, "rec:", function(x){ return x.id; });
   data.goals = ordered(cur.goals, "goal:", function(x){ return x.id; });
+  data.cashback = ordered(cur.cashback, "cb:", function(x){ return x.id; });
   data.history = Object.keys(F).filter(function(k){ return k.indexOf("hist:") === 0; }).map(function(k){ return deepCopy(F[k]); })
     .sort(function(a, b){ return a.month.localeCompare(b.month); });
   data.log = Object.keys(F).filter(function(k){ return k.indexOf("log:") === 0; }).map(function(k){ return deepCopy(F[k]); })
@@ -4810,7 +4906,7 @@ function syncBuildData(F, cur){
 }
 
 function syncApplyData(data){
-  DATA.accounts = data.accounts; DATA.ops = data.ops; DATA.recurring = data.recurring; DATA.goals = data.goals;
+  DATA.accounts = data.accounts; DATA.ops = data.ops; DATA.recurring = data.recurring; DATA.goals = data.goals; DATA.cashback = normalizeCashback(data.cashback);
   DATA.history = data.history; DATA.log = data.log; DATA.banks = data.banks.length ? data.banks : DATA.banks;
   DATA.opCats = normalizeOpCats(data.opCats);
   if(data.rates) DATA.rates = normalizeRates(data.rates);
@@ -5104,7 +5200,7 @@ function syncFileToBackup(parsed){
 
 
 /* ===== Закрытие окон кликом мимо ===== */
-var OVERLAY_CLOSERS = { addOverlay: "closeAddSheet", goalOverlay: "closeGoalSheet", transferOverlay: "closeTransferSheet", adjOverlay: "closeAdjSheet", logOverlay: "closeLogSheet",
+var OVERLAY_CLOSERS = { addOverlay: "closeAddSheet", goalOverlay: "closeGoalSheet", transferOverlay: "closeTransferSheet", adjOverlay: "closeAdjSheet", cbOverlay: "closeCashback", logOverlay: "closeLogSheet",
   historyOverlay: "closeHistorySheet", logEditOverlay: "closeLogEdit", histEditOverlay: "closeHistEdit", recOverlay: "closeRecSheet",
   msgOverlay: "closeMsg", conflictOverlay: "closeConflicts" };
 var overlayDownTarget = null;
