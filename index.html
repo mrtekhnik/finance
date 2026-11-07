@@ -457,6 +457,9 @@
   .gear-btn svg{width:21px; height:21px;}
   .gear-btn.on{background:rgba(255,255,255,.34);}
   .adj-mode.active{background:var(--primary); color:#fff; border-color:var(--primary);}
+  .cb-chips{display:flex; flex-wrap:wrap; gap:6px;}
+  .cb-chip{display:inline-flex; align-items:center; gap:4px; border:1px solid var(--border); background:var(--surface); border-radius:16px; padding:3px 4px 3px 10px; font-size:calc(13px * var(--fs,1));}
+  .cb-chip button{border:none; background:none; color:var(--ink-faint); font-size:15px; padding:2px 6px;}
   .cb-bank{margin-bottom:12px;}
   .cb-bname{font-weight:700; margin-bottom:4px; display:flex; align-items:center; gap:8px;}
   .cb-row{display:flex; align-items:center; gap:6px; padding:6px 0; border-top:1px solid var(--hair);}
@@ -900,9 +903,16 @@
   <div class="card" data-svc="cashback">
     <h2>Кешбек по банкам</h2>
     <p style="font-size:calc(12px * var(--fs,1)); color:var(--ink-faint); margin:0 0 10px;">Справочник: где какой кешбек. Проценты банки меняют по месяцам — правьте в одно касание.</p>
+    <label>Категории кешбека</label>
+    <div id="cbCatList" class="cb-chips"></div>
+    <div class="btn-row" style="margin-top:8px;">
+      <input type="text" id="newCbCat" placeholder="Новая категория (АЗС, Аптеки…)" maxlength="40" style="flex:1; width:auto; min-width:0;" onkeydown="if(event.key==='Enter'){event.preventDefault();addCbCat();}">
+      <button type="button" class="btn primary" style="flex:0 0 auto; width:auto; padding:11px 16px;" onclick="addCbCat()">+</button>
+    </div>
+    <div class="section-gap"></div>
     <div id="cashbackList"></div>
     <div class="section-gap"></div>
-    <button type="button" class="btn primary" onclick="openCashback()">+ Добавить позицию</button>
+    <button type="button" class="btn primary" onclick="openCashback()">+ Добавить в банк</button>
   </div>
 
   <div class="card" data-svc="cats">
@@ -1189,7 +1199,7 @@
     <h3 id="cbTitle">Позиция кешбека</h3>
     <form class="sheet" onsubmit="return submitCashback(event)">
       <div><label>Банк</label><select id="cbBank"></select></div>
-      <div><label>За что (категория)</label><input type="text" id="cbName" placeholder="Напр. Продукты, АЗС, Аптеки" required maxlength="60"></div>
+      <div><label>Категория кешбека</label><select id="cbName"></select><div class="hint-line" id="cbNoCats" hidden>Сначала добавьте категории кешбека в карточке.</div></div>
       <div><label>Процент, %</label><input type="number" id="cbPct" step="0.1" min="0" max="100" inputmode="decimal" placeholder="0" required></div>
       <div><label>Примечание (необязательно)</label><input type="text" id="cbNote" placeholder="Напр. лимит 3000 грн, до 30.11" maxlength="80"></div>
       <div class="btn-row sheet-footer">
@@ -1396,7 +1406,7 @@
 </div>
 
 <script>
-var DATA = { accounts: [], banks: ["Monobank","ПУМБ","Райффайзен","ПриватБанк","Sense Bank","Наличные"], rates: { USD: { buy: 41.0, sell: 41.8 }, EUR: { buy: 44.0, sell: 45.2 } }, sortMode: "bank", appLock: { enabled: false, hash: null }, depositTaxRate: 23, goals: [], cashback: [], history: [], log: [], recurring: [], settings: null, ops: [], opCats: { exp: [], inc: [] }, riskSettings: { currencyThreshold: 50, bankThreshold: 35, minLiquidity: 60, guaranteeLimit: 600000, bankCurrencyThreshold: 30, reinvestThreshold: 20 } };
+var DATA = { accounts: [], banks: ["Monobank","ПУМБ","Райффайзен","ПриватБанк","Sense Bank","Наличные"], rates: { USD: { buy: 41.0, sell: 41.8 }, EUR: { buy: 44.0, sell: 45.2 } }, sortMode: "bank", appLock: { enabled: false, hash: null }, depositTaxRate: 23, goals: [], cashback: [], cbCats: [], history: [], log: [], recurring: [], settings: null, ops: [], opCats: { exp: [], inc: [] }, riskSettings: { currencyThreshold: 50, bankThreshold: 35, minLiquidity: 60, guaranteeLimit: 600000, bankCurrencyThreshold: 30, reinvestThreshold: 20 } };
 var STORAGE_KEY = "savings-app-data";
 var editingId = null;
 var CUR_COLORS = { UAH: "#3E4E6B", USD: "#E8C468", EUR: "#6FAE8D" };
@@ -1496,6 +1506,7 @@ async function loadData(){
       DATA.depositTaxRate = (typeof parsed.depositTaxRate === "number") ? parsed.depositTaxRate : DATA.depositTaxRate;
       DATA.goals = Array.isArray(parsed.goals) ? parsed.goals : DATA.goals;
       DATA.cashback = normalizeCashback(parsed.cashback);
+      DATA.cbCats = normalizeCbCats(parsed.cbCats, DATA.cashback);
       DATA.history = Array.isArray(parsed.history) ? parsed.history : DATA.history;
       DATA.log = Array.isArray(parsed.log) ? parsed.log : [];
       DATA.ops = Array.isArray(parsed.ops) ? parsed.ops : [];
@@ -2431,7 +2442,42 @@ function normalizeCashback(arr){
   return arr.filter(function(x){ return x && typeof x.id === "string" && typeof x.bank === "string" && typeof x.name === "string" && typeof x.pct === "number"; })
     .map(function(x){ return { id: x.id, bank: x.bank, name: x.name, pct: x.pct, note: typeof x.note === "string" ? x.note : "" }; });
 }
+function normalizeCbCats(arr, positions){
+  var set = {}, out = [];
+  (Array.isArray(arr) ? arr : []).concat((positions || []).map(function(c){ return c.name; })).forEach(function(n){
+    if(typeof n === "string" && n.trim() && !set[n.trim()]){ set[n.trim()] = 1; out.push(n.trim()); }
+  });
+  return out.sort(function(a, b){ return a.localeCompare(b, "ru"); });
+}
+function addCbCat(){
+  var el = document.getElementById("newCbCat"), n = el.value.trim();
+  if(!n) return;
+  if(DATA.cbCats.some(function(x){ return x.toLowerCase() === n.toLowerCase(); })){ toast("Такая категория уже есть"); return; }
+  DATA.cbCats = normalizeCbCats(DATA.cbCats.concat([n]), []);
+  el.value = ""; saveData(); renderCashback();
+}
+function renameCbCat(i){
+  var old = DATA.cbCats[i]; if(old === undefined) return;
+  var n = (prompt("Новое название категории", old) || "").trim();
+  if(!n || n === old) return;
+  if(DATA.cbCats.some(function(x){ return x.toLowerCase() === n.toLowerCase() && x !== old; })){ toast("Такая категория уже есть"); return; }
+  DATA.cashback.forEach(function(c){ if(c.name === old) c.name = n; });
+  DATA.cbCats = normalizeCbCats(DATA.cbCats.filter(function(x){ return x !== old; }).concat([n]), []);
+  saveData(); renderCashback();
+}
+function removeCbCat(i){
+  var n = DATA.cbCats[i]; if(n === undefined) return;
+  var used = DATA.cashback.filter(function(c){ return c.name === n; }).length;
+  if(!confirm(used ? "Категория «" + n + "» назначена в банках (" + used + "). Удалить её вместе с этими позициями?" : "Удалить категорию «" + n + "»?")) return;
+  DATA.cashback = DATA.cashback.filter(function(c){ return c.name !== n; });
+  DATA.cbCats.splice(i, 1);
+  saveData(); renderCashback();
+}
 function renderCashback(){
+  var chips = document.getElementById("cbCatList");
+  if(chips) chips.innerHTML = DATA.cbCats.length ? DATA.cbCats.map(function(n, i){
+    return '<span class="cb-chip"><span onclick="renameCbCat(' + i + ')" style="cursor:pointer;">' + esc(n) + '</span><button type="button" aria-label="Удалить категорию" onclick="removeCbCat(' + i + ')">✕</button></span>';
+  }).join("") : '<span style="font-size:calc(13px * var(--fs,1)); color:var(--ink-faint);">Категорий пока нет</span>';
   var wrap = document.getElementById("cashbackList"); if(!wrap) return;
   var banks = DATA.banks.slice();
   DATA.cashback.forEach(function(c){ if(banks.indexOf(c.bank) === -1) banks.push(c.bank); });
@@ -2446,7 +2492,7 @@ function renderCashback(){
           '<button type="button" class="icon-btn" aria-label="Удалить" onclick="deleteCashback(\'' + c.id + '\')">✕</button></div>';
       }).join("") + '</div>';
   }).join("");
-  wrap.innerHTML = html || '<div style="font-size:calc(13px * var(--fs,1)); color:var(--ink-faint);">Пока пусто — нажмите «+ Добавить позицию».</div>';
+  wrap.innerHTML = html || '<div style="font-size:calc(13px * var(--fs,1)); color:var(--ink-faint);">Пока пусто — нажмите «+ Добавить в банк».</div>';
 }
 function openCashback(id){
   var c = id ? DATA.cashback.find(function(x){ return x.id === id; }) : null;
@@ -2456,7 +2502,11 @@ function openCashback(id){
   var banks = DATA.banks.slice(); if(c && banks.indexOf(c.bank) === -1) banks.push(c.bank);
   sel.innerHTML = banks.map(function(b){ return '<option>' + esc(b) + '</option>'; }).join("");
   if(c) sel.value = c.bank; else if(cbLastBank && banks.indexOf(cbLastBank) !== -1) sel.value = cbLastBank;
-  document.getElementById("cbName").value = c ? c.name : "";
+  var cs = document.getElementById("cbName");
+  var cats = DATA.cbCats.slice(); if(c && cats.indexOf(c.name) === -1) cats.push(c.name);
+  cs.innerHTML = cats.map(function(n){ return '<option>' + esc(n) + '</option>'; }).join("");
+  document.getElementById("cbNoCats").hidden = cats.length > 0;
+  if(c) cs.value = c.name;
   document.getElementById("cbPct").value = c ? c.pct : "";
   document.getElementById("cbNote").value = c ? c.note : "";
   document.getElementById("cbOverlay").hidden = false;
@@ -2465,9 +2515,9 @@ var cbLastBank = "";
 function closeCashback(){ document.getElementById("cbOverlay").hidden = true; editingCbId = null; }
 function submitCashback(ev){
   ev.preventDefault();
-  var bank = document.getElementById("cbBank").value, name = document.getElementById("cbName").value.trim();
+  var bank = document.getElementById("cbBank").value, name = (document.getElementById("cbName").value || "").trim();
   var pct = parseFloat(document.getElementById("cbPct").value), note = document.getElementById("cbNote").value.trim();
-  if(!bank || !name || isNaN(pct) || pct < 0 || pct > 100){ toast("Проверьте банк, название и процент"); return false; }
+  if(!bank || !name || isNaN(pct) || pct < 0 || pct > 100){ toast(name ? "Проверьте банк и процент" : "Сначала добавьте категорию кешбека"); return false; }
   cbLastBank = bank;
   var c = editingCbId ? DATA.cashback.find(function(x){ return x.id === editingCbId; }) : null;
   if(c){ c.bank = bank; c.name = name; c.pct = pct; c.note = note; }
@@ -4412,7 +4462,7 @@ async function checkForUpdate(){
   btn.disabled = false;
 }
 
-var APP_VERSION = "2026-11-07.2";
+var APP_VERSION = "2026-11-07.3";
 var BACKUP_KEY = "savings-app-last-backup";
 var EXPORT_TS_KEY = "savings-app-last-export-ts";
 var IMPORT_TS_KEY = "savings-app-last-import-ts";
@@ -4558,6 +4608,7 @@ function replaceDataFrom(parsed){
   DATA.depositTaxRate = (typeof parsed.depositTaxRate === "number") ? parsed.depositTaxRate : DATA.depositTaxRate;
   DATA.goals = Array.isArray(parsed.goals) ? parsed.goals : [];
   DATA.cashback = normalizeCashback(parsed.cashback);
+  DATA.cbCats = normalizeCbCats(parsed.cbCats, DATA.cashback);
   DATA.history = Array.isArray(parsed.history) ? parsed.history : [];
   DATA.log = Array.isArray(parsed.log) ? parsed.log : [];
   DATA.ops = Array.isArray(parsed.ops) ? parsed.ops : [];
@@ -4721,6 +4772,7 @@ function syncCollect(noM){
   DATA.recurring.forEach(function(r){ add("rec:" + r.id, r); });
   DATA.goals.forEach(function(g){ add("goal:" + g.id, g); });
   DATA.cashback.forEach(function(c){ add("cb:" + c.id, c); });
+  DATA.cbCats.forEach(function(n){ add("cbcat:" + n, { name: n }); });
   DATA.history.forEach(function(h){ add("hist:" + h.month, h); });
   DATA.log.forEach(function(e){ if(e.id) add("log:" + e.id, e); });
   DATA.banks.forEach(function(b){ add("bank:" + b, { name: b }); });
@@ -4788,7 +4840,7 @@ function syncParseRemote(R){
     if(kind === "acc" && (typeof d.amount !== "number" || typeof d.bank !== "string")) throw syncCorrupt();
     if(kind === "op" && (typeof d.amount !== "number" || typeof d.date !== "string")) throw syncCorrupt();
     if(kind === "hist" && (typeof d.month !== "string" || typeof d.totalUAH !== "number")) throw syncCorrupt();
-    if((kind === "bank" || kind === "cat") && typeof d.name !== "string") throw syncCorrupt();
+    if((kind === "bank" || kind === "cat" || kind === "cbcat") && typeof d.name !== "string") throw syncCorrupt();
     out[k] = { d: d, m: it.m, fp: fpOf(d) };
   });
   var purged = (R.purged && typeof R.purged === "object" && !Array.isArray(R.purged)) ? R.purged : {};
@@ -4874,6 +4926,7 @@ function syncBuildData(F, cur){
   data.recurring = ordered(cur.recurring, "rec:", function(x){ return x.id; });
   data.goals = ordered(cur.goals, "goal:", function(x){ return x.id; });
   data.cashback = ordered(cur.cashback, "cb:", function(x){ return x.id; });
+  data.cbCats = Object.keys(F).filter(function(k){ return k.indexOf("cbcat:") === 0; }).map(function(k){ return F[k].name; });
   data.history = Object.keys(F).filter(function(k){ return k.indexOf("hist:") === 0; }).map(function(k){ return deepCopy(F[k]); })
     .sort(function(a, b){ return a.month.localeCompare(b.month); });
   data.log = Object.keys(F).filter(function(k){ return k.indexOf("log:") === 0; }).map(function(k){ return deepCopy(F[k]); })
@@ -4906,7 +4959,7 @@ function syncBuildData(F, cur){
 }
 
 function syncApplyData(data){
-  DATA.accounts = data.accounts; DATA.ops = data.ops; DATA.recurring = data.recurring; DATA.goals = data.goals; DATA.cashback = normalizeCashback(data.cashback);
+  DATA.accounts = data.accounts; DATA.ops = data.ops; DATA.recurring = data.recurring; DATA.goals = data.goals; DATA.cashback = normalizeCashback(data.cashback); DATA.cbCats = normalizeCbCats(data.cbCats, DATA.cashback);
   DATA.history = data.history; DATA.log = data.log; DATA.banks = data.banks.length ? data.banks : DATA.banks;
   DATA.opCats = normalizeOpCats(data.opCats);
   if(data.rates) DATA.rates = normalizeRates(data.rates);
