@@ -467,7 +467,10 @@
   .cb-main{flex:1 1 auto; min-width:0; display:flex; flex-direction:column;}
   .cb-name{word-break:break-word;}
   .cb-note{font-size:calc(12px * var(--fs,1)); color:var(--ink-faint);}
-  .cb-note.stale{color:var(--warn-ink);}
+  .cb-month{margin:0 0 8px; font-size:calc(14px * var(--fs,1));}
+  .cb-mpick{position:relative; display:inline-block; cursor:pointer; color:var(--accent-ink);}
+  .cb-mpick.stale b{color:var(--warn-ink);}
+  .cb-mpick input{position:absolute; inset:0; width:100%; height:100%; opacity:0; cursor:pointer; border:none; padding:0;}
   .cb-pct{font-weight:700; color:var(--pos-ink); flex:0 0 auto; padding:0 4px;}
   .sync-btn{position:absolute; right:100px; top:14px; width:38px; height:38px; border-radius:50%; border:none; background:rgba(255,255,255,.16); color:#fff; display:flex; align-items:center; justify-content:center; font-size:22px; line-height:1;}
   .sync-btn.spin span{display:inline-block; animation:syncspin 1s linear infinite;}
@@ -905,6 +908,7 @@
   <div class="card" data-svc="cashback">
     <h2>Кешбек по банкам</h2>
     <p style="font-size:calc(12px * var(--fs,1)); color:var(--ink-faint); margin:0 0 10px;">Справочник: где какой кешбек. Проценты банки меняют по месяцам — правьте в одно касание.</p>
+    <div class="cb-month">Актуально на: <span class="cb-mpick"><b id="cbMonthLabel"></b> ▾<input type="month" id="cbMonthInput" aria-label="Месяц, на который актуален кешбек" onchange="setCbMonth(this.value)"></span></div>
     <div class="m-toggle" style="margin-top:0; border-top:none; padding:6px 0;" onclick="toggleSection('cbcats')"><span>Категории кешбека</span><span class="chev" id="cbcatsChev">▾</span></div>
     <div id="cbCatBody" hidden>
     <div id="cbCatList" class="cb-chips"></div>
@@ -1410,7 +1414,7 @@
 </div>
 
 <script>
-var DATA = { accounts: [], banks: ["Monobank","ПУМБ","Райффайзен","ПриватБанк","Sense Bank","Наличные"], rates: { USD: { buy: 41.0, sell: 41.8 }, EUR: { buy: 44.0, sell: 45.2 } }, sortMode: "bank", appLock: { enabled: false, hash: null }, depositTaxRate: 23, goals: [], cashback: [], cbCats: [], history: [], log: [], recurring: [], settings: null, ops: [], opCats: { exp: [], inc: [] }, riskSettings: { currencyThreshold: 50, bankThreshold: 35, minLiquidity: 60, guaranteeLimit: 600000, bankCurrencyThreshold: 30, reinvestThreshold: 20 } };
+var DATA = { accounts: [], banks: ["Monobank","ПУМБ","Райффайзен","ПриватБанк","Sense Bank","Наличные"], rates: { USD: { buy: 41.0, sell: 41.8 }, EUR: { buy: 44.0, sell: 45.2 } }, sortMode: "bank", appLock: { enabled: false, hash: null }, depositTaxRate: 23, goals: [], cashback: [], cbCats: [], cashbackMonth: "", history: [], log: [], recurring: [], settings: null, ops: [], opCats: { exp: [], inc: [] }, riskSettings: { currencyThreshold: 50, bankThreshold: 35, minLiquidity: 60, guaranteeLimit: 600000, bankCurrencyThreshold: 30, reinvestThreshold: 20 } };
 var STORAGE_KEY = "savings-app-data";
 var editingId = null;
 var CUR_COLORS = { UAH: "#3E4E6B", USD: "#E8C468", EUR: "#6FAE8D" };
@@ -1511,6 +1515,7 @@ async function loadData(){
       DATA.goals = Array.isArray(parsed.goals) ? parsed.goals : DATA.goals;
       DATA.cashback = normalizeCashback(parsed.cashback);
       DATA.cbCats = normalizeCbCats(parsed.cbCats, DATA.cashback);
+      DATA.cashbackMonth = normalizeCbMonth(parsed.cashbackMonth, DATA.cashback);
       DATA.history = Array.isArray(parsed.history) ? parsed.history : DATA.history;
       DATA.log = Array.isArray(parsed.log) ? parsed.log : [];
       DATA.ops = Array.isArray(parsed.ops) ? parsed.ops : [];
@@ -2444,7 +2449,7 @@ var editingCbId = null;
 function normalizeCashback(arr){
   if(!Array.isArray(arr)) return [];
   return arr.filter(function(x){ return x && typeof x.id === "string" && typeof x.bank === "string" && typeof x.name === "string" && typeof x.pct === "number"; })
-    .map(function(x){ return { id: x.id, bank: x.bank, name: x.name, pct: x.pct, note: typeof x.note === "string" ? x.note : "", upd: /^\d{4}-\d{2}$/.test(x.upd || "") ? x.upd : currentMonthKey() }; });
+    .map(function(x){ return { id: x.id, bank: x.bank, name: x.name, pct: x.pct, note: typeof x.note === "string" ? x.note : "" }; });
 }
 function normalizeCbCats(arr, positions){
   var set = {}, out = [];
@@ -2453,12 +2458,21 @@ function normalizeCbCats(arr, positions){
   });
   return out.sort(function(a, b){ return a.localeCompare(b, "ru"); });
 }
+function normalizeCbMonth(v, positions){
+  if(typeof v === "string" && /^\d{4}-\d{2}$/.test(v)) return v;
+  return (positions && positions.length) ? currentMonthKey() : "";
+}
+function touchCb(){ DATA.cashbackMonth = currentMonthKey(); }
+function setCbMonth(v){
+  if(!/^\d{4}-\d{2}$/.test(v || "")) return;
+  DATA.cashbackMonth = v; saveData(); renderCashback();
+}
 function addCbCat(){
   var el = document.getElementById("newCbCat"), n = el.value.trim();
   if(!n) return;
   if(DATA.cbCats.some(function(x){ return x.toLowerCase() === n.toLowerCase(); })){ toast("Такая категория уже есть"); return; }
   DATA.cbCats = normalizeCbCats(DATA.cbCats.concat([n]), []);
-  el.value = ""; saveData(); renderCashback();
+  el.value = ""; touchCb(); saveData(); renderCashback();
 }
 function renameCbCat(i){
   var old = DATA.cbCats[i]; if(old === undefined) return;
@@ -2467,7 +2481,7 @@ function renameCbCat(i){
   if(DATA.cbCats.some(function(x){ return x.toLowerCase() === n.toLowerCase() && x !== old; })){ toast("Такая категория уже есть"); return; }
   DATA.cashback.forEach(function(c){ if(c.name === old) c.name = n; });
   DATA.cbCats = normalizeCbCats(DATA.cbCats.filter(function(x){ return x !== old; }).concat([n]), []);
-  saveData(); renderCashback();
+  touchCb(); saveData(); renderCashback();
 }
 function removeCbCat(i){
   var n = DATA.cbCats[i]; if(n === undefined) return;
@@ -2475,9 +2489,15 @@ function removeCbCat(i){
   if(!confirm(used ? "Категория «" + n + "» назначена в банках (" + used + "). Удалить её вместе с этими позициями?" : "Удалить категорию «" + n + "»?")) return;
   DATA.cashback = DATA.cashback.filter(function(c){ return c.name !== n; });
   DATA.cbCats.splice(i, 1);
-  saveData(); renderCashback();
+  touchCb(); saveData(); renderCashback();
 }
 function renderCashback(){
+  var ml = document.getElementById("cbMonthLabel");
+  if(ml){
+    ml.textContent = DATA.cashbackMonth ? monthKeyToLabel(DATA.cashbackMonth) : "не указано";
+    ml.parentNode.classList.toggle("stale", !!DATA.cashbackMonth && DATA.cashbackMonth !== currentMonthKey());
+    var mi = document.getElementById("cbMonthInput"); if(mi) mi.value = DATA.cashbackMonth || currentMonthKey();
+  }
   var chips = document.getElementById("cbCatList");
   if(chips) chips.innerHTML = DATA.cbCats.length ? DATA.cbCats.map(function(n, i){
     return '<span class="cb-chip"><span onclick="renameCbCat(' + i + ')" style="cursor:pointer;">' + esc(n) + '</span><button type="button" aria-label="Удалить категорию" onclick="removeCbCat(' + i + ')">✕</button></span>';
@@ -2490,7 +2510,7 @@ function renderCashback(){
     if(!items.length) return "";
     return '<div class="cb-bank"><div class="cb-bname"><span class="bank-dot" style="background:' + bankColor(b) + '"></span>' + esc(b) + '</div>' +
       items.map(function(c){
-        return '<div class="cb-row"><div class="cb-main"><span class="cb-name">' + esc(c.name) + '</span>' + '<span class="cb-note' + (c.upd !== currentMonthKey() ? ' stale' : '') + '">' + esc(monthKeyToLabel(c.upd)) + (c.note ? ' · ' + esc(c.note) : '') + '</span></div>' +
+        return '<div class="cb-row"><div class="cb-main"><span class="cb-name">' + esc(c.name) + '</span>' + (c.note ? '<span class="cb-note">' + esc(c.note) + '</span>' : '') + '</div>' +
           '<span class="cb-pct">' + String(c.pct).replace(".", ",") + '%</span>' +
           '<button type="button" class="icon-btn" aria-label="Изменить" onclick="openCashback(\'' + c.id + '\')">✎</button>' +
           '<button type="button" class="icon-btn" aria-label="Удалить" onclick="deleteCashback(\'' + c.id + '\')">✕</button></div>';
@@ -2524,9 +2544,9 @@ function submitCashback(ev){
   if(!bank || !name || isNaN(pct) || pct < 0 || pct > 100){ toast(name ? "Проверьте банк и процент" : "Сначала добавьте категорию кешбека"); return false; }
   cbLastBank = bank;
   var c = editingCbId ? DATA.cashback.find(function(x){ return x.id === editingCbId; }) : null;
-  if(c){ c.bank = bank; c.name = name; c.pct = pct; c.note = note; c.upd = currentMonthKey(); }
-  else DATA.cashback.push({ id: uid(), bank: bank, name: name, pct: pct, note: note, upd: currentMonthKey() });
-  saveData(); closeCashback(); renderCashback();
+  if(c){ c.bank = bank; c.name = name; c.pct = pct; c.note = note; }
+  else DATA.cashback.push({ id: uid(), bank: bank, name: name, pct: pct, note: note });
+  touchCb(); saveData(); closeCashback(); renderCashback();
   toast("Сохранено");
   return false;
 }
@@ -2534,7 +2554,7 @@ function deleteCashback(id){
   var c = DATA.cashback.find(function(x){ return x.id === id; }); if(!c) return;
   if(!confirm("Удалить позицию «" + c.name + " — " + c.pct + "%» (" + c.bank + ")?")) return;
   DATA.cashback = DATA.cashback.filter(function(x){ return x.id !== id; });
-  saveData(); renderCashback();
+  touchCb(); saveData(); renderCashback();
 }
 
 function moveBank(idx, dir){
@@ -4466,7 +4486,7 @@ async function checkForUpdate(){
   btn.disabled = false;
 }
 
-var APP_VERSION = "2026-11-07.5";
+var APP_VERSION = "2026-11-07.7";
 var BACKUP_KEY = "savings-app-last-backup";
 var EXPORT_TS_KEY = "savings-app-last-export-ts";
 var IMPORT_TS_KEY = "savings-app-last-import-ts";
@@ -4613,6 +4633,7 @@ function replaceDataFrom(parsed){
   DATA.goals = Array.isArray(parsed.goals) ? parsed.goals : [];
   DATA.cashback = normalizeCashback(parsed.cashback);
   DATA.cbCats = normalizeCbCats(parsed.cbCats, DATA.cashback);
+  DATA.cashbackMonth = normalizeCbMonth(parsed.cashbackMonth, DATA.cashback);
   DATA.history = Array.isArray(parsed.history) ? parsed.history : [];
   DATA.log = Array.isArray(parsed.log) ? parsed.log : [];
   DATA.ops = Array.isArray(parsed.ops) ? parsed.ops : [];
@@ -4777,6 +4798,7 @@ function syncCollect(noM){
   DATA.goals.forEach(function(g){ add("goal:" + g.id, g); });
   DATA.cashback.forEach(function(c){ add("cb:" + c.id, c); });
   DATA.cbCats.forEach(function(n){ add("cbcat:" + n, { name: n }); });
+  add("cfg:cbMonth", { month: DATA.cashbackMonth || "" });
   DATA.history.forEach(function(h){ add("hist:" + h.month, h); });
   DATA.log.forEach(function(e){ if(e.id) add("log:" + e.id, e); });
   DATA.banks.forEach(function(b){ add("bank:" + b, { name: b }); });
@@ -4881,6 +4903,7 @@ function syncMerge(L, R, B, purgedR, held, dupOk){
           res.merged[k] = { d: m, m: Math.max(l.m, r.m) }; return;
         }
       }
+      if(!b && kind === "cfg"){ res.down.push(k); return; }   /* новое устройство: настройки берём из репозитория, а не затираем его значениями по умолчанию */
       if(SYNC_CHOICE[kind]){ res.conf.push(k); return; }
       if(l.m > r.m || (l.m === r.m && l.fp > r.fp)) res.up.push(k); else res.down.push(k);
       return;
@@ -4930,6 +4953,7 @@ function syncBuildData(F, cur){
   data.recurring = ordered(cur.recurring, "rec:", function(x){ return x.id; });
   data.goals = ordered(cur.goals, "goal:", function(x){ return x.id; });
   data.cashback = ordered(cur.cashback, "cb:", function(x){ return x.id; });
+  if(F["cfg:cbMonth"]) data.cashbackMonth = F["cfg:cbMonth"].month;
   data.cbCats = Object.keys(F).filter(function(k){ return k.indexOf("cbcat:") === 0; }).map(function(k){ return F[k].name; });
   data.history = Object.keys(F).filter(function(k){ return k.indexOf("hist:") === 0; }).map(function(k){ return deepCopy(F[k]); })
     .sort(function(a, b){ return a.month.localeCompare(b.month); });
@@ -4963,7 +4987,7 @@ function syncBuildData(F, cur){
 }
 
 function syncApplyData(data){
-  DATA.accounts = data.accounts; DATA.ops = data.ops; DATA.recurring = data.recurring; DATA.goals = data.goals; DATA.cashback = normalizeCashback(data.cashback); DATA.cbCats = normalizeCbCats(data.cbCats, DATA.cashback);
+  DATA.accounts = data.accounts; DATA.ops = data.ops; DATA.recurring = data.recurring; DATA.goals = data.goals; DATA.cashback = normalizeCashback(data.cashback); DATA.cbCats = normalizeCbCats(data.cbCats, DATA.cashback); DATA.cashbackMonth = normalizeCbMonth(data.cashbackMonth, DATA.cashback);
   DATA.history = data.history; DATA.log = data.log; DATA.banks = data.banks.length ? data.banks : DATA.banks;
   DATA.opCats = normalizeOpCats(data.opCats);
   if(data.rates) DATA.rates = normalizeRates(data.rates);
