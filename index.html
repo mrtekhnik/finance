@@ -467,6 +467,7 @@
   .cb-main{flex:1 1 auto; min-width:0; display:flex; flex-direction:column;}
   .cb-name{word-break:break-word;}
   .cb-note{font-size:calc(12px * var(--fs,1)); color:var(--ink-faint);}
+  .cb-note.stale{color:var(--warn-ink);}
   .cb-pct{font-weight:700; color:var(--pos-ink); flex:0 0 auto; padding:0 4px;}
   .sync-btn{position:absolute; right:100px; top:14px; width:38px; height:38px; border-radius:50%; border:none; background:rgba(255,255,255,.16); color:#fff; display:flex; align-items:center; justify-content:center; font-size:22px; line-height:1;}
   .sync-btn.spin span{display:inline-block; animation:syncspin 1s linear infinite;}
@@ -2443,7 +2444,7 @@ var editingCbId = null;
 function normalizeCashback(arr){
   if(!Array.isArray(arr)) return [];
   return arr.filter(function(x){ return x && typeof x.id === "string" && typeof x.bank === "string" && typeof x.name === "string" && typeof x.pct === "number"; })
-    .map(function(x){ return { id: x.id, bank: x.bank, name: x.name, pct: x.pct, note: typeof x.note === "string" ? x.note : "" }; });
+    .map(function(x){ return { id: x.id, bank: x.bank, name: x.name, pct: x.pct, note: typeof x.note === "string" ? x.note : "", upd: /^\d{4}-\d{2}$/.test(x.upd || "") ? x.upd : currentMonthKey() }; });
 }
 function normalizeCbCats(arr, positions){
   var set = {}, out = [];
@@ -2489,7 +2490,7 @@ function renderCashback(){
     if(!items.length) return "";
     return '<div class="cb-bank"><div class="cb-bname"><span class="bank-dot" style="background:' + bankColor(b) + '"></span>' + esc(b) + '</div>' +
       items.map(function(c){
-        return '<div class="cb-row"><div class="cb-main"><span class="cb-name">' + esc(c.name) + '</span>' + (c.note ? '<span class="cb-note">' + esc(c.note) + '</span>' : '') + '</div>' +
+        return '<div class="cb-row"><div class="cb-main"><span class="cb-name">' + esc(c.name) + '</span>' + '<span class="cb-note' + (c.upd !== currentMonthKey() ? ' stale' : '') + '">' + esc(monthKeyToLabel(c.upd)) + (c.note ? ' · ' + esc(c.note) : '') + '</span></div>' +
           '<span class="cb-pct">' + String(c.pct).replace(".", ",") + '%</span>' +
           '<button type="button" class="icon-btn" aria-label="Изменить" onclick="openCashback(\'' + c.id + '\')">✎</button>' +
           '<button type="button" class="icon-btn" aria-label="Удалить" onclick="deleteCashback(\'' + c.id + '\')">✕</button></div>';
@@ -2523,8 +2524,8 @@ function submitCashback(ev){
   if(!bank || !name || isNaN(pct) || pct < 0 || pct > 100){ toast(name ? "Проверьте банк и процент" : "Сначала добавьте категорию кешбека"); return false; }
   cbLastBank = bank;
   var c = editingCbId ? DATA.cashback.find(function(x){ return x.id === editingCbId; }) : null;
-  if(c){ c.bank = bank; c.name = name; c.pct = pct; c.note = note; }
-  else DATA.cashback.push({ id: uid(), bank: bank, name: name, pct: pct, note: note });
+  if(c){ c.bank = bank; c.name = name; c.pct = pct; c.note = note; c.upd = currentMonthKey(); }
+  else DATA.cashback.push({ id: uid(), bank: bank, name: name, pct: pct, note: note, upd: currentMonthKey() });
   saveData(); closeCashback(); renderCashback();
   toast("Сохранено");
   return false;
@@ -4465,7 +4466,7 @@ async function checkForUpdate(){
   btn.disabled = false;
 }
 
-var APP_VERSION = "2026-11-07.4";
+var APP_VERSION = "2026-11-07.5";
 var BACKUP_KEY = "savings-app-last-backup";
 var EXPORT_TS_KEY = "savings-app-last-export-ts";
 var IMPORT_TS_KEY = "savings-app-last-import-ts";
