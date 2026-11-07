@@ -1,6 +1,6 @@
 /* Служебный файл: хранит копию приложения для работы без интернета и ловит новые версии.
    Версия подставляется автоматически при выпуске. */
-const VERSION = "2026-11-06.4";
+const VERSION = "2026-11-07.1";
 const CACHE = "savings-" + VERSION;
 const SHELL = ["./", "index.html", "manifest.webmanifest", "icon-192.png", "icon-512.png"];
 
