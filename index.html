@@ -460,6 +460,7 @@
   .cb-chips{display:flex; flex-wrap:wrap; gap:6px;}
   .cb-chip{display:inline-flex; align-items:center; gap:4px; border:1px solid var(--border); background:var(--surface); border-radius:16px; padding:3px 4px 3px 10px; font-size:calc(13px * var(--fs,1));}
   .cb-chip button{border:none; background:none; color:var(--ink-faint); font-size:15px; padding:2px 6px;}
+  .cb-row .icon-btn{flex:0 0 38px; width:38px; height:38px; min-width:38px; padding:0;}
   .cb-bank{margin-bottom:12px;}
   .cb-bname{font-weight:700; margin-bottom:4px; display:flex; align-items:center; gap:8px;}
   .cb-row{display:flex; align-items:center; gap:6px; padding:6px 0; border-top:1px solid var(--hair);}
@@ -903,11 +904,13 @@
   <div class="card" data-svc="cashback">
     <h2>Кешбек по банкам</h2>
     <p style="font-size:calc(12px * var(--fs,1)); color:var(--ink-faint); margin:0 0 10px;">Справочник: где какой кешбек. Проценты банки меняют по месяцам — правьте в одно касание.</p>
-    <label>Категории кешбека</label>
+    <div class="m-toggle" style="margin-top:0; border-top:none; padding:6px 0;" onclick="toggleSection('cbcats')"><span>Категории кешбека</span><span class="chev" id="cbcatsChev">▾</span></div>
+    <div id="cbCatBody" hidden>
     <div id="cbCatList" class="cb-chips"></div>
     <div class="btn-row" style="margin-top:8px;">
       <input type="text" id="newCbCat" placeholder="Новая категория (АЗС, Аптеки…)" maxlength="40" style="flex:1; width:auto; min-width:0;" onkeydown="if(event.key==='Enter'){event.preventDefault();addCbCat();}">
       <button type="button" class="btn primary" style="flex:0 0 auto; width:auto; padding:11px 16px;" onclick="addCbCat()">+</button>
+    </div>
     </div>
     <div class="section-gap"></div>
     <div id="cashbackList"></div>
@@ -1200,7 +1203,7 @@
     <form class="sheet" onsubmit="return submitCashback(event)">
       <div><label>Банк</label><select id="cbBank"></select></div>
       <div><label>Категория кешбека</label><select id="cbName"></select><div class="hint-line" id="cbNoCats" hidden>Сначала добавьте категории кешбека в карточке.</div></div>
-      <div><label>Процент, %</label><input type="number" id="cbPct" step="0.1" min="0" max="100" inputmode="decimal" placeholder="0" required></div>
+      <div><label>Процент, %</label><input type="number" id="cbPct" step="0.05" min="0" max="100" inputmode="decimal" placeholder="0" required></div>
       <div><label>Примечание (необязательно)</label><input type="text" id="cbNote" placeholder="Напр. лимит 3000 грн, до 30.11" maxlength="80"></div>
       <div class="btn-row sheet-footer">
         <button type="button" class="btn ghost" onclick="closeCashback()">Отмена</button>
@@ -2991,8 +2994,8 @@ function deleteAccount(id){
 
 /* ===== Секции, журнал счетов, переводы ===== */
 var UI_KEY = "savings-app-ui";
-var uiPrefs = { history: false, risks: false, month: true, deps: false, rec: false, cats: false, opcat: false, depsCollapsed: {}, svcOpen: {}, adjOp: false };
-try{ var _u = JSON.parse(localStorage.getItem(UI_KEY) || "null"); if(_u && typeof _u === "object"){ uiPrefs.history = !!_u.history; uiPrefs.risks = !!_u.risks; uiPrefs.deps = !!_u.deps; uiPrefs.rec = !!_u.rec; uiPrefs.cats = !!_u.cats; uiPrefs.opcat = !!_u.opcat; uiPrefs.adjOp = !!_u.adjOp; if(typeof _u.month === "boolean") uiPrefs.month = _u.month; if(_u.depsCollapsed && typeof _u.depsCollapsed === "object") uiPrefs.depsCollapsed = _u.depsCollapsed; if(_u.svcOpen && typeof _u.svcOpen === "object") uiPrefs.svcOpen = _u.svcOpen; } }catch(e){}
+var uiPrefs = { history: false, risks: false, month: true, deps: false, rec: false, cats: false, opcat: false, cbcats: false, depsCollapsed: {}, svcOpen: {}, adjOp: false };
+try{ var _u = JSON.parse(localStorage.getItem(UI_KEY) || "null"); if(_u && typeof _u === "object"){ uiPrefs.history = !!_u.history; uiPrefs.risks = !!_u.risks; uiPrefs.deps = !!_u.deps; uiPrefs.rec = !!_u.rec; uiPrefs.cats = !!_u.cats; uiPrefs.opcat = !!_u.opcat; uiPrefs.cbcats = !!_u.cbcats; uiPrefs.adjOp = !!_u.adjOp; if(typeof _u.month === "boolean") uiPrefs.month = _u.month; if(_u.depsCollapsed && typeof _u.depsCollapsed === "object") uiPrefs.depsCollapsed = _u.depsCollapsed; if(_u.svcOpen && typeof _u.svcOpen === "object") uiPrefs.svcOpen = _u.svcOpen; } }catch(e){}
 
 function pluralRu(n, forms){
   var a = Math.abs(n) % 100, b = a % 10;
@@ -3014,7 +3017,7 @@ function toggleSection(name){
 }
 
 function applySections(){
-  [["history","historyBody","historyChev"],["risks","riskList","risksChev"],["month","monthBody","monthChev"],["deps","depsBody","depsChev"],["rec","recBody","recChev"],["opcat","opCats","opcatChev"],["cats","catsBody","catsChev"]].forEach(function(r){
+  [["history","historyBody","historyChev"],["risks","riskList","risksChev"],["month","monthBody","monthChev"],["deps","depsBody","depsChev"],["rec","recBody","recChev"],["opcat","opCats","opcatChev"],["cbcats","cbCatBody","cbcatsChev"],["cats","catsBody","catsChev"]].forEach(function(r){
     var body = document.getElementById(r[1]), chev = document.getElementById(r[2]);
     if(!body || !chev) return;
     body.hidden = !uiPrefs[r[0]];
@@ -4462,7 +4465,7 @@ async function checkForUpdate(){
   btn.disabled = false;
 }
 
-var APP_VERSION = "2026-11-07.3";
+var APP_VERSION = "2026-11-07.4";
 var BACKUP_KEY = "savings-app-last-backup";
 var EXPORT_TS_KEY = "savings-app-last-export-ts";
 var IMPORT_TS_KEY = "savings-app-last-import-ts";
