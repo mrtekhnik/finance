@@ -990,6 +990,14 @@
     <div id="lockManageRow" class="btn-row" style="margin-top:12px;" hidden>
       <button class="btn ghost" onclick="startChangePassword()">Изменить пароль</button>
     </div>
+    <div class="toggle-row" id="bioRow" style="margin-top:12px;" hidden>
+      <span>Входить по биометрии (отпечаток / лицо)</span>
+      <label class="switch">
+        <input type="checkbox" id="bioToggle" onchange="onBioToggleChanged(this.checked)">
+        <span class="slider"></span>
+      </label>
+    </div>
+    <p id="bioHint" style="font-size:calc(12px * var(--fs,1)); color:var(--ink-faint); margin-top:8px;" hidden>Включается отдельно на каждом устройстве. Пароль остаётся запасным способом входа.</p>
     <p style="font-size:calc(12px * var(--fs,1)); color:var(--ink-faint); margin-top:12px;">
       Это простой экран входа — защита от случайного взгляда, а не настоящее шифрование.
       Забыли пароль — восстановить его нельзя, только очистить данные сайта в Chrome
@@ -1409,6 +1417,7 @@
     <h2>Введите пароль</h2>
     <input type="text" class="secret" id="lockInput" name="app-pin" inputmode="numeric" autocomplete="off" placeholder="Пароль" data-lpignore="true" data-1p-ignore>
     <button class="btn primary" onclick="tryUnlock()" style="margin-top:12px;">Войти</button>
+    <button class="btn ghost" id="lockBioBtn" onclick="bioUnlock()" style="margin-top:8px;" hidden>👆 Войти по биометрии</button>
     <div id="lockError" class="lock-error" hidden>Неверный пароль</div>
   </div>
 </div>
@@ -2601,6 +2610,7 @@ function renderRates(){
   var enabled = !!(DATA.appLock && DATA.appLock.enabled);
   document.getElementById("lockToggle").checked = enabled;
   document.getElementById("lockManageRow").hidden = !enabled;
+  bioRenderSettings(enabled);
   document.getElementById("depCalcTax").value = DATA.depositTaxRate;
   renderCalc();
   renderDepositCalc();
@@ -2750,6 +2760,7 @@ async function onLockToggleChanged(checked){
       return;
     }
     DATA.appLock = { enabled: true, hash: await sha256(p1) };
+    bioClear();
     saveData();
     renderRates();
     toast("Пароль включён");
@@ -2763,6 +2774,7 @@ async function onLockToggleChanged(checked){
       return;
     }
     DATA.appLock = { enabled: false, hash: null };
+    bioClear();
     saveData();
     renderRates();
     toast("Пароль отключён");
@@ -2786,19 +2798,80 @@ async function startChangePassword(){
     return;
   }
   DATA.appLock.hash = await sha256(p1);
+  bioClear();
   saveData();
-  toast("Пароль изменён");
+  renderRates();
+  toast("Пароль изменён. Биометрию включите заново");
 }
 
+var BIO_KEY = "savings-app-bio";
+function bioSupported(){
+  return !!(window.PublicKeyCredential && navigator.credentials && navigator.credentials.create && window.isSecureContext);
+}
+function bioGet(){
+  try{ var o = JSON.parse(localStorage.getItem(BIO_KEY) || "null"); return o && o.id ? o : null; }catch(e){ return null; }
+}
+function bioClear(){ try{ localStorage.removeItem(BIO_KEY); }catch(e){} }
+function bioB64(buf){ return btoa(String.fromCharCode.apply(null, new Uint8Array(buf))); }
+function bioFromB64(s){ var b = atob(s), a = new Uint8Array(b.length); for(var i=0;i<b.length;i++) a[i]=b.charCodeAt(i); return a; }
+function bioRenderSettings(lockOn){
+  var row = document.getElementById("bioRow"), hint = document.getElementById("bioHint");
+  var show = !!lockOn && bioSupported();
+  row.hidden = !show; hint.hidden = !show;
+  document.getElementById("bioToggle").checked = !!bioGet();
+}
+async function onBioToggleChanged(checked){
+  var toggle = document.getElementById("bioToggle");
+  if(!checked){ bioClear(); toast("Вход по биометрии отключён"); return; }
+  var pw = prompt("Введите пароль, чтобы включить биометрию:");
+  if(pw === null){ toggle.checked = false; return; }
+  if(await sha256(pw) !== DATA.appLock.hash){ alert("Неверный пароль"); toggle.checked = false; return; }
+  try{
+    var cred = await navigator.credentials.create({ publicKey: {
+      challenge: crypto.getRandomValues(new Uint8Array(32)),
+      rp: { name: "Личные накопления" },
+      user: { id: crypto.getRandomValues(new Uint8Array(16)), name: "savings", displayName: "Личные накопления" },
+      pubKeyCredParams: [{ type: "public-key", alg: -7 }, { type: "public-key", alg: -257 }],
+      authenticatorSelection: { authenticatorAttachment: "platform", userVerification: "required", residentKey: "discouraged" },
+      timeout: 60000, attestation: "none"
+    }});
+    localStorage.setItem(BIO_KEY, JSON.stringify({ id: bioB64(cred.rawId) }));
+    toast("Вход по биометрии включён");
+  }catch(e){
+    toggle.checked = false;
+    toast("Не удалось включить биометрию. Проверьте, что в телефоне настроен отпечаток или блокировка экрана");
+  }
+}
+function lockFinish(){
+  var input = document.getElementById("lockInput");
+  document.getElementById("lockOverlay").hidden = true;
+  document.getElementById("lockError").hidden = true;
+  input.value = "";
+  document.getElementById("topbarSub").textContent = "";
+  showScreen((DATA.settings && DATA.settings.startScreen) || "home");
+}
+var bioBusy = false;
+async function bioUnlock(){
+  var b = bioGet();
+  if(!b || bioBusy || !bioSupported()) return;
+  bioBusy = true;
+  try{
+    await navigator.credentials.get({ publicKey: {
+      challenge: crypto.getRandomValues(new Uint8Array(32)),
+      allowCredentials: [{ type: "public-key", id: bioFromB64(b.id), transports: ["internal"] }],
+      userVerification: "required", timeout: 60000
+    }});
+    lockFinish();
+  }catch(e){
+    var inp = document.getElementById("lockInput"); if(inp) inp.focus();
+  }
+  bioBusy = false;
+}
 async function tryUnlock(){
   var input = document.getElementById("lockInput");
   var h = await sha256(input.value);
   if(h === DATA.appLock.hash){
-    document.getElementById("lockOverlay").hidden = true;
-    document.getElementById("lockError").hidden = true;
-    input.value = "";
-    document.getElementById("topbarSub").textContent = "";
-    showScreen((DATA.settings && DATA.settings.startScreen) || "home");
+    lockFinish();
   } else {
     document.getElementById("lockError").hidden = false;
     input.value = "";
@@ -4486,7 +4559,7 @@ async function checkForUpdate(){
   btn.disabled = false;
 }
 
-var APP_VERSION = "2026-11-07.7";
+var APP_VERSION = "2026-11-08.1";
 var BACKUP_KEY = "savings-app-last-backup";
 var EXPORT_TS_KEY = "savings-app-last-export-ts";
 var IMPORT_TS_KEY = "savings-app-last-import-ts";
@@ -5309,7 +5382,12 @@ async function init(){
     lockInput.addEventListener("keydown", function(ev){
       if(ev.key === "Enter") tryUnlock();
     });
-    lockInput.focus();
+    if(bioGet() && bioSupported()){
+      document.getElementById("lockBioBtn").hidden = false;
+      bioUnlock();
+    } else {
+      lockInput.focus();
+    }
   } else {
     document.getElementById("topbarSub").textContent = "";
     showScreen((DATA.settings && DATA.settings.startScreen) || "home");
